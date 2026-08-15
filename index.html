@@ -7,6 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Work+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root {
     --wood-950: #1a120d;
@@ -546,6 +549,111 @@
     opacity: 0.65;
     border-style: dashed;
   }
+
+  /* Facturas & Fotos Styling */
+  .invoice-photo-card {
+    background: var(--wood-950);
+    border: 1px solid var(--cork-line);
+    border-radius: var(--radius);
+    padding: 12px;
+    margin-bottom: 16px;
+    text-align: center;
+    position: relative;
+  }
+  .invoice-photo-preview {
+    max-height: 240px;
+    width: 100%;
+    object-fit: contain;
+    border-radius: 8px;
+    border: 1px solid var(--cork-line);
+    background: var(--wood-900);
+    cursor: zoom-in;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+  .invoice-photo-preview:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  }
+  .invoice-photo-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .invoice-photo-empty {
+    padding: 18px 12px;
+    border: 1px dashed var(--amber);
+    border-radius: 8px;
+    background: rgba(209,154,61,0.08);
+    text-align: center;
+    margin-bottom: 16px;
+  }
+  .invoice-empresa-card {
+    background: var(--wood-900);
+    border: 1px solid var(--cork-line);
+    border-left: 3px solid var(--amber);
+    border-radius: var(--radius);
+    padding: 12px 14px;
+    margin-bottom: 14px;
+  }
+  .badge-empresa {
+    background: rgba(209,154,61,0.18);
+    color: var(--amber-bright);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+  }
+  .badge-photo {
+    background: rgba(111,154,92,0.2);
+    color: var(--good);
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .badge-no-photo {
+    background: rgba(193,80,46,0.2);
+    color: var(--bad);
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .export-action-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+  .progress-bar-wrap {
+    width: 100%;
+    height: 10px;
+    background: var(--wood-800);
+    border-radius: 5px;
+    overflow: hidden;
+    margin: 12px 0 6px;
+    border: 1px solid var(--cork-line);
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--amber), var(--amber-bright));
+    width: 0%;
+    transition: width 0.25s ease;
+  }
+  #modal-image-zoom .modal-sheet {
+    max-width: 900px;
+    max-height: 94vh;
+    padding: 14px;
+  }
+  #zoom-img-target {
+    width: 100%;
+    max-height: 80vh;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #000;
+  }
 </style>
 </head>
 <body>
@@ -666,14 +774,35 @@
 
     <!-- 4. FACTURAS -->
     <div id="view-facturas" class="screen hidden">
-      <h1 class="page-title">Facturas</h1>
-      <p class="page-sub">Escanea facturas, calcula multiplicadores por caja y controla vencimientos.</p>
-      <button class="btn btn-primary btn-block" id="btn-open-scan" style="margin-bottom: 20px;">
-        <span class="ico">📷</span> Escanear factura
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px; flex-wrap:wrap; gap:6px;">
+        <h1 class="page-title" style="margin:0;">Facturas</h1>
+        <button class="btn btn-ghost" id="btn-open-export-modal" style="padding:7px 12px; font-size:12.5px;">
+          📁 Exportar Carpetas / PDF
+        </button>
+      </div>
+      <p class="page-sub">Escanea facturas, calcula multiplicadores por caja, genera PDFs con OCR y exporta en carpetas.</p>
+      
+      <button class="btn btn-primary btn-block" id="btn-open-scan" style="margin-bottom: 14px;">
+        <span class="ico">📷</span> Escanear nueva factura
       </button>
-      <div class="section-label">Últimas procesadas (Toca para ver detalle y foto)</div>
+
+      <div class="field-row" style="margin-bottom:8px;">
+        <div class="field" style="flex:2; margin-bottom:0;">
+          <input type="text" id="search-facturas-input" placeholder="Buscar por empresa, N° factura, fecha…" style="margin-bottom:0;">
+        </div>
+        <div class="field" style="flex:1; margin-bottom:0;">
+          <select id="filter-facturas-empresa" onchange="renderFacturasList()" style="margin-bottom:0;">
+            <option value="ALL">Todas las empresas</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="section-label" style="display:flex; justify-content:space-between; align-items:center;">
+        <span>Facturas Registradas</span>
+        <span id="facturas-count-badge" class="badge badge-ok">0 facturas</span>
+      </div>
       <div class="card" id="facturas-list">
-        <div class="empty">Aún no hay facturas registradas.</div>
+        <div class="empty">Cargando facturas…</div>
       </div>
     </div>
 
@@ -1040,19 +1169,43 @@
   <div class="modal-sheet">
     <button class="modal-close" onclick="document.getElementById('modal-scan').classList.add('hidden')">×</button>
     <h2>Escanear Factura</h2>
+    <div class="modal-sub">Sube una foto o escaneo de la factura. Gemini extraerá la empresa, RUC, fechas y productos.</div>
     <div class="photo-input-wrap">📷 Seleccionar o Tomar Foto<input type="file" id="invoice-file" accept="image/*"></div>
     <div id="invoice-preview-container" class="hidden" style="text-align:center; margin-bottom:14px;">
-      <img id="invoice-preview-img" style="max-height: 150px; border-radius:8px; border:1px solid var(--cork-line);">
+      <img id="invoice-preview-img" style="max-height: 160px; border-radius:8px; border:1px solid var(--cork-line);">
     </div>
     <button class="btn btn-primary btn-block" id="btn-process-invoice" disabled>Procesar con IA</button>
     
     <div id="invoice-results" class="hidden" style="margin-top:20px;">
       <hr class="divider">
-      <div class="section-label">Fechas &amp; Crédito</div>
+      <div class="section-label">Datos del Emisor / Empresa</div>
       <div class="field-row">
-        <div class="field"><label>Fecha Emisión / Pedido</label><input type="date" id="scan-fecha-emision"></div>
-        <div class="field"><label>Fecha Vencimiento Pago</label><input type="date" id="scan-fecha-vencimiento"></div>
+        <div class="field">
+          <label>Empresa / Distribuidora / Proveedor</label>
+          <input type="text" id="scan-empresa" placeholder="Ej: DINADEC S.A., Cervecería Nacional">
+        </div>
+        <div class="field">
+          <label>RUC del Emisor</label>
+          <input type="text" id="scan-ruc" placeholder="Ej: 1790008759001">
+        </div>
       </div>
+
+      <div class="section-label">Comprobante &amp; Fechas</div>
+      <div class="field-row">
+        <div class="field" style="flex:1.2;">
+          <label>Número de Factura</label>
+          <input type="text" id="scan-numero-factura" placeholder="001-001-000123456">
+        </div>
+        <div class="field">
+          <label>Fecha Emisión (Compra)</label>
+          <input type="date" id="scan-fecha-emision">
+        </div>
+        <div class="field">
+          <label>Fecha Vencimiento</label>
+          <input type="date" id="scan-fecha-vencimiento">
+        </div>
+      </div>
+
       <div id="invoice-header-summary" style="margin-bottom: 12px; font-size: 13px; color: var(--cream-dim);"></div>
       <label>Revisión y cálculo de paquetes/unidades:</label>
       <div id="invoice-items-list"></div>
@@ -1066,13 +1219,109 @@
   <div class="modal-sheet">
     <button class="modal-close" onclick="document.getElementById('modal-detalle-factura').classList.add('hidden')">×</button>
     <h2 id="det-fac-titulo">Factura</h2>
-    <div class="modal-sub" id="det-fac-sub">Detalle de mercadería ingresada</div>
-    <div id="det-fac-foto-container" style="text-align:center; margin-bottom:16px;"></div>
+    <div class="modal-sub" id="det-fac-sub">Detalle de compra y mercadería ingresada</div>
+    
+    <div id="det-fac-empresa-card" class="invoice-empresa-card"></div>
+    
+    <!-- Contenedor de Foto Original en Supabase -->
+    <div id="det-fac-foto-container"></div>
+    <input type="file" id="det-fac-file-input" accept="image/*" class="hidden">
+
+    <!-- Botones de Exportación Rápida de esta Factura -->
+    <div class="section-label">Exportación y Comprobantes</div>
+    <div class="export-action-grid">
+      <button class="btn btn-ghost" id="btn-det-download-pdf" style="font-size:12.5px; padding:9px 10px;">
+        📄 Descargar PDF OCR
+      </button>
+      <button class="btn btn-ghost" id="btn-det-download-img" style="font-size:12.5px; padding:9px 10px;">
+        🖼️ Descargar Foto
+      </button>
+      <button class="btn btn-ghost" id="btn-det-export-folder" style="grid-column: span 2; font-size:12.5px; padding:9px 10px;">
+        📁 Exportar Factura a Carpeta / ZIP
+      </button>
+    </div>
+
     <div class="card" id="det-fac-fechas-card" style="margin-bottom: 16px; font-size: 13.5px;"></div>
     <div class="card" id="det-fac-totales" style="margin-bottom: 16px;"></div>
+    
     <div class="section-label">Líneas de compra</div>
     <div class="card" id="det-fac-lineas" style="margin-bottom: 16px;"></div>
+    
     <button class="btn btn-danger btn-block" id="btn-eliminar-factura">🗑 Eliminar Factura y Revertir Stock</button>
+  </div>
+</div>
+
+<!-- Modal: Exportación Organizada en Carpetas (Masiva / Filtrada) -->
+<div class="modal-backdrop hidden" id="modal-export-facturas">
+  <div class="modal-sheet">
+    <button class="modal-close" onclick="document.getElementById('modal-export-facturas').classList.add('hidden')">×</button>
+    <h2>📁 Exportar Facturas en Carpetas</h2>
+    <div class="modal-sub">
+      Organiza automáticamente tus facturas en subcarpetas por <b>[Empresa] / [Año] / [Fecha_Compra]</b>.
+      Cada carpeta incluirá la <b>imagen original</b> y la <b>versión PDF con OCR indexable</b>.
+    </div>
+
+    <div class="card" style="margin-bottom: 14px;">
+      <div class="field">
+        <label>Filtrar por Empresa / Proveedor</label>
+        <select id="export-filter-empresa" onchange="updateExportSummary()">
+          <option value="ALL">Todas las empresas</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>Periodo de Compra</label>
+        <select id="export-filter-periodo" onchange="toggleCustomExportDates(); updateExportSummary();">
+          <option value="mes" selected>Este Mes</option>
+          <option value="anio">Este Año</option>
+          <option value="todo">Histórico Completo</option>
+          <option value="custom">Rango Personalizado</option>
+        </select>
+      </div>
+
+      <div class="field-row hidden" id="export-custom-dates">
+        <div class="field">
+          <label>Desde</label>
+          <input type="date" id="export-date-from" onchange="updateExportSummary()">
+        </div>
+        <div class="field">
+          <label>Hasta</label>
+          <input type="date" id="export-date-to" onchange="updateExportSummary()">
+        </div>
+      </div>
+
+      <div id="export-summary-box" style="font-size:13px; color:var(--amber-bright); font-weight:600; padding-top:4px;">
+        Calculando facturas a exportar…
+      </div>
+    </div>
+
+    <div id="export-progress-wrap" class="hidden" style="margin-bottom:14px;">
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="export-progress-bar"></div>
+      </div>
+      <div id="export-progress-text" style="font-size:12px; color:var(--cream-dim); text-align:center;">Preparando archivos…</div>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:8px;">
+      <button type="button" class="btn btn-primary btn-block" id="btn-start-export-filesystem">
+        📁 Guardar en Carpeta de mi Computadora
+      </button>
+      <button type="button" class="btn btn-ghost btn-block" id="btn-start-export-zip">
+        📦 Descargar como Archivo ZIP Estructurado
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Zoom / Lightbox de Foto de Factura -->
+<div class="modal-backdrop hidden" id="modal-image-zoom">
+  <div class="modal-sheet">
+    <button class="modal-close" onclick="document.getElementById('modal-image-zoom').classList.add('hidden')">×</button>
+    <h2 id="zoom-img-title">Foto de Factura Original</h2>
+    <div style="text-align:center; padding:10px 0;">
+      <img id="zoom-img-target" src="" alt="Factura">
+    </div>
+    <button class="btn btn-ghost btn-block" onclick="document.getElementById('modal-image-zoom').classList.add('hidden')">Cerrar</button>
   </div>
 </div>
 
@@ -2513,46 +2762,263 @@ document.getElementById('btn-export-csv').addEventListener('click', async () => 
 });
 
 // =====================================================================
-// FACTURAS (OCR + RECONOCIMIENTO DE MULTIPLICADOR + CHECK CONSUMO)
+// FACTURAS (SUPABASE + OCR COMPLETO + PDF + EXPORTACIÓN EN CARPETAS)
 // =====================================================================
+let facturasData = [];
+let currentFacturaObj = null;
+let currentFacturaLines = [];
+let currentFacturaImgUrl = null;
+
 async function loadFacturas() {
-  const { data } = await sb.from('facturas_compra').select('id, numero_factura, fecha_registro, fecha_emision, fecha_vencimiento, subtotal, iva, total, estado').order('fecha_registro', {ascending:false}).limit(15);
-  if(data && data.length) {
-    document.getElementById('facturas-list').innerHTML = data.map(f => {
-      let vencBadge = '';
-      if(f.fecha_vencimiento){
-        const diff = Math.ceil((new Date(f.fecha_vencimiento+'T23:59:59') - new Date()) / (1000 * 60 * 60 * 24));
-        vencBadge = diff < 0 ? `<span class="badge badge-low">Vencida (${Math.abs(diff)}d)</span>` : `<span class="badge badge-ok">Vence en ${diff}d</span>`;
-      }
-      return `
-        <div class="invoice-item" onclick="verDetalleFactura(${f.id})" style="cursor:pointer;">
-          <div>
-            <div class="cart-item-name">Factura #${f.numero_factura || f.id} ${vencBadge}</div>
-            <div class="cart-item-meta">IVA: ${money(f.iva)} | ${f.fecha_emision || new Date(f.fecha_registro).toLocaleDateString()}</div>
-          </div>
-          <div class="cart-item-price">${money(f.total)}</div>
-        </div>
-      `;
-    }).join('');
-  } else {
-    document.getElementById('facturas-list').innerHTML = '<div class="empty">Aún no hay facturas registradas.</div>';
+  try {
+    const { data, error } = await sb.from('facturas_compra').select(`
+      id, numero_factura, fecha_registro, fecha_emision, fecha_vencimiento, subtotal, iva, total, estado, datos_ocr_raw,
+      imagenes_factura ( id, url_imagen, es_principal )
+    `).order('fecha_registro', { ascending: false });
+
+    if(error) throw error;
+    facturasData = data || [];
+    
+    populateEmpresaFilterDropdown();
+    renderFacturasList();
+  } catch(err) {
+    console.error('Error cargando facturas:', err);
+    document.getElementById('facturas-list').innerHTML = `<div class="empty">Error al cargar facturas: ${err.message}</div>`;
   }
 }
 
+function populateEmpresaFilterDropdown() {
+  const sel = document.getElementById('filter-facturas-empresa');
+  const exportSel = document.getElementById('export-filter-empresa');
+  if(!sel) return;
+
+  const currentVal = sel.value;
+  const empresas = new Set();
+
+  facturasData.forEach(f => {
+    const emp = (f.datos_ocr_raw?.empresa_emisor || '').trim();
+    if(emp) empresas.add(emp);
+  });
+
+  const empList = Array.from(empresas).sort();
+  
+  let optionsHtml = '<option value="ALL">Todas las empresas</option>';
+  empList.forEach(emp => {
+    optionsHtml += `<option value="${escapeHtml(emp)}">${escapeHtml(emp)}</option>`;
+  });
+
+  sel.innerHTML = optionsHtml;
+  if(exportSel) exportSel.innerHTML = optionsHtml;
+  sel.value = currentVal || 'ALL';
+}
+
+function renderFacturasList() {
+  const list = document.getElementById('facturas-list');
+  const searchInput = document.getElementById('search-facturas-input');
+  const filterEmpresa = document.getElementById('filter-facturas-empresa');
+  const badgeCount = document.getElementById('facturas-count-badge');
+
+  const q = (searchInput ? searchInput.value : '').toLowerCase().trim();
+  const selectedEmp = filterEmpresa ? filterEmpresa.value : 'ALL';
+
+  const filtered = facturasData.filter(f => {
+    const emp = (f.datos_ocr_raw?.empresa_emisor || '').toLowerCase();
+    const num = (f.numero_factura || '').toLowerCase();
+    const fecha = (f.fecha_emision || f.fecha_registro || '').toLowerCase();
+    
+    const matchQuery = !q || emp.includes(q) || num.includes(q) || fecha.includes(q) || String(f.id).includes(q);
+    const matchEmpresa = selectedEmp === 'ALL' || (f.datos_ocr_raw?.empresa_emisor || '').trim() === selectedEmp;
+
+    return matchQuery && matchEmpresa;
+  });
+
+  if(badgeCount) {
+    badgeCount.textContent = `${filtered.length} factura(s)`;
+  }
+
+  if(filtered.length === 0) {
+    list.innerHTML = `<div class="empty">${facturasData.length === 0 ? 'Aún no hay facturas registradas.' : 'No se encontraron facturas con este filtro o búsqueda.'}</div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(f => {
+    const empName = f.datos_ocr_raw?.empresa_emisor || 'Proveedor general';
+    const ruc = f.datos_ocr_raw?.ruc_emisor ? ` · RUC: ${f.datos_ocr_raw.ruc_emisor}` : '';
+    const hasPhoto = (f.imagenes_factura && f.imagenes_factura.length > 0) || Boolean(f.datos_ocr_raw?.url_imagen);
+    const fechaCompra = f.fecha_emision || new Date(f.fecha_registro).toLocaleDateString();
+
+    let vencBadge = '';
+    if(f.fecha_vencimiento){
+      const diff = Math.ceil((new Date(f.fecha_vencimiento+'T23:59:59') - new Date()) / (1000 * 60 * 60 * 24));
+      vencBadge = diff < 0 ? `<span class="badge badge-low">Vencida (${Math.abs(diff)}d)</span>` : `<span class="badge badge-ok">Vence en ${diff}d</span>`;
+    }
+
+    return `
+      <div class="invoice-item" onclick="verDetalleFactura(${f.id})" style="cursor:pointer; padding:12px 0;">
+        <div style="flex:1; min-width:0; padding-right:10px;">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:3px;">
+            <span class="badge-empresa">🏢 ${escapeHtml(empName)}</span>
+            <span class="${hasPhoto ? 'badge-photo' : 'badge-no-photo'}">${hasPhoto ? '📷 Con Foto' : '⚠ Sin Foto'}</span>
+            ${vencBadge}
+          </div>
+          <div class="cart-item-name" style="font-size:14px;">Factura #${f.numero_factura || f.id}</div>
+          <div class="cart-item-meta">📅 Fecha Compra: <b>${fechaCompra}</b> | IVA: ${money(f.iva)}${ruc}</div>
+        </div>
+        <div class="cart-item-price" style="font-size:15px; font-weight:700;">${money(f.total)}</div>
+      </div>
+    `;
+  }).join('');
+}
+
+document.getElementById('search-facturas-input')?.addEventListener('input', renderFacturasList);
+
+// Helper para escapar HTML
+function escapeHtml(str) {
+  if(!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
+}
+
+// =====================================================================
+// GUARDADO Y SUBIDA DE IMÁGENES 100% EN SUPABASE
+// =====================================================================
+async function uploadInvoiceImageToSupabase(facturaId, file) {
+  if(!file) return null;
+  try {
+    const fileExt = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    const cleanPath = `facturas/fac_${facturaId}_${Date.now()}.${fileExt}`;
+    
+    // 1. Subida al bucket en Supabase Storage
+    const { data: uploadData, error: upErr } = await sb.storage.from(BUCKET_PRODUCTOS).upload(cleanPath, file, {
+      cacheControl: '3600',
+      upsert: true,
+      contentType: file.type || 'image/jpeg'
+    });
+    
+    if(upErr) {
+      console.error('Error subiendo imagen a Supabase Storage:', upErr);
+      showToast('Aviso: No se pudo subir el archivo al almacenamiento de Supabase: ' + upErr.message, true);
+      return null;
+    }
+
+    // 2. Obtener URL pública desde Supabase Storage
+    const { data: pubData } = sb.storage.from(BUCKET_PRODUCTOS).getPublicUrl(cleanPath);
+    const publicUrl = pubData.publicUrl;
+
+    // 3. Registrar en tabla imagenes_factura en Supabase
+    const { data: existingImgs } = await sb.from('imagenes_factura').select('id').eq('factura_id', facturaId);
+    if(existingImgs && existingImgs.length > 0) {
+      await sb.from('imagenes_factura').update({ url_imagen: publicUrl }).eq('id', existingImgs[0].id);
+    } else {
+      await sb.from('imagenes_factura').insert({
+        factura_id: facturaId,
+        url_imagen: publicUrl,
+        es_principal: true
+      });
+    }
+
+    // 4. Actualizar datos_ocr_raw en facturas_compra en Supabase
+    const { data: currentFac } = await sb.from('facturas_compra').select('datos_ocr_raw').eq('id', facturaId).single();
+    if(currentFac) {
+      const raw = currentFac.datos_ocr_raw || {};
+      raw.url_imagen = publicUrl;
+      await sb.from('facturas_compra').update({ datos_ocr_raw: raw }).eq('id', facturaId);
+    }
+
+    return publicUrl;
+  } catch(e) {
+    console.error('Excepción al subir imagen de factura a Supabase:', e);
+    showToast('Error al guardar foto en Supabase: ' + e.message, true);
+    return null;
+  }
+}
+
+window.triggerUploadPhotoForFactura = function() {
+  document.getElementById('det-fac-file-input').click();
+};
+
+document.getElementById('det-fac-file-input')?.addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file || !currentFacturaDetalleId) return;
+  
+  showToast('Subiendo foto a Supabase Storage…');
+  const url = await uploadInvoiceImageToSupabase(currentFacturaDetalleId, file);
+  if(url) {
+    showToast('Foto registrada exitosamente en Supabase ✓');
+    await verDetalleFactura(currentFacturaDetalleId);
+    await loadFacturas();
+  }
+  e.target.value = '';
+});
+
+window.openInvoicePhotoZoom = function(url, title) {
+  if(!url) return;
+  document.getElementById('zoom-img-target').src = url;
+  document.getElementById('zoom-img-title').textContent = title || 'Foto de Factura';
+  document.getElementById('modal-image-zoom').classList.remove('hidden');
+};
+
+// =====================================================================
+// VER DETALLE DE FACTURA (CON FOTO, EXPORTACIÓN INDIVIDUAL Y LÍNEAS)
+// =====================================================================
 window.verDetalleFactura = async function(facturaId) {
   currentFacturaDetalleId = facturaId;
-  const { data: fac } = await sb.from('facturas_compra').select('*').eq('id', facturaId).single();
-  const { data: lineas } = await sb.from('detalle_factura_compra').select('*, productos(nombre)').eq('factura_id', facturaId);
+  
+  const { data: fac, error: fErr } = await sb.from('facturas_compra').select('*').eq('id', facturaId).single();
+  const { data: lineas, error: lErr } = await sb.from('detalle_factura_compra').select('*, productos(nombre)').eq('factura_id', facturaId);
   const { data: imgs } = await sb.from('imagenes_factura').select('url_imagen').eq('factura_id', facturaId);
 
-  document.getElementById('det-fac-titulo').textContent = `Factura #${fac.numero_factura || fac.id}`;
-  document.getElementById('det-fac-sub').textContent = `Registrada: ${new Date(fac.fecha_registro).toLocaleString()}`;
-  
-  const fotoContainer = document.getElementById('det-fac-foto-container');
-  fotoContainer.innerHTML = (imgs && imgs[0]) ? `<img src="${imgs[0].url_imagen}" style="width:100%; max-height:220px; object-fit:contain; border-radius:8px; border:1px solid var(--cork-line);">` : '';
+  if(fErr || !fac) return showToast('Error cargando factura de Supabase', true);
 
+  currentFacturaObj = fac;
+  currentFacturaLines = lineas || [];
+  
+  const imgUrl = (imgs && imgs[0]?.url_imagen) || fac.datos_ocr_raw?.url_imagen || null;
+  currentFacturaImgUrl = imgUrl;
+
+  const empName = fac.datos_ocr_raw?.empresa_emisor || 'Proveedor no especificado';
+  const ruc = fac.datos_ocr_raw?.ruc_emisor || 'N/A';
+  const fechaCompra = fac.fecha_emision || new Date(fac.fecha_registro).toLocaleDateString();
+
+  document.getElementById('det-fac-titulo').textContent = `Factura #${fac.numero_factura || fac.id}`;
+  document.getElementById('det-fac-sub').textContent = `Registrada en sistema: ${new Date(fac.fecha_registro).toLocaleString()}`;
+  
+  // Banner de Empresa & RUC
+  document.getElementById('det-fac-empresa-card').innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:4px;">
+      <div>
+        <div style="font-size:11px; text-transform:uppercase; color:var(--cream-faint); font-weight:700;">Empresa Emisora / Proveedor</div>
+        <b style="font-size:15px; color:var(--amber-bright);">${escapeHtml(empName)}</b>
+      </div>
+      <div style="font-size:12px; color:var(--cream-dim); font-family:var(--font-mono);">RUC: <b>${escapeHtml(ruc)}</b></div>
+    </div>
+  `;
+
+  // Visualizador de Foto en Supabase
+  const fotoContainer = document.getElementById('det-fac-foto-container');
+  if(imgUrl) {
+    fotoContainer.innerHTML = `
+      <div class="invoice-photo-card">
+        <img src="${imgUrl}" class="invoice-photo-preview" onclick="openInvoicePhotoZoom('${imgUrl}', 'Factura #${fac.numero_factura || fac.id} - ${escapeHtml(empName)}')" alt="Foto de factura">
+        <div class="invoice-photo-actions">
+          <button type="button" class="btn btn-ghost" onclick="openInvoicePhotoZoom('${imgUrl}', 'Factura #${fac.numero_factura || fac.id}')" style="padding:6px 12px; font-size:12px;">🔍 Ver en Grande</button>
+          <button type="button" class="btn btn-ghost" onclick="triggerUploadPhotoForFactura()" style="padding:6px 12px; font-size:12px;">🔄 Cambiar Foto</button>
+        </div>
+      </div>
+    `;
+  } else {
+    fotoContainer.innerHTML = `
+      <div class="invoice-photo-empty">
+        <div style="font-size:24px; margin-bottom:4px;">📷</div>
+        <b style="color:var(--amber-bright); font-size:13.5px;">Esta factura no tiene foto en Supabase</b>
+        <p style="font-size:12px; color:var(--cream-dim); margin:4px 0 10px;">Puedes subir y guardar la foto original ahora en Supabase para tenerla siempre y exportarla en carpetas.</p>
+        <button type="button" class="btn btn-primary" onclick="triggerUploadPhotoForFactura()" style="padding:8px 16px; font-size:12.5px;">📤 Subir Foto a Supabase</button>
+      </div>
+    `;
+  }
+
+  // Fechas y Totales
   document.getElementById('det-fac-fechas-card').innerHTML = `
-    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Emisión / Pedido:</span><b>${fac.fecha_emision || 'N/A'}</b></div>
+    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Fecha de Compra / Emisión:</span><b>${fechaCompra}</b></div>
     <div style="display:flex; justify-content:space-between;"><span>Vencimiento Pago:</span><b style="color:var(--amber-bright);">${fac.fecha_vencimiento || 'Contado'}</b></div>
   `;
 
@@ -2560,15 +3026,16 @@ window.verDetalleFactura = async function(facturaId) {
     <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:13.5px;"><span>Subtotal:</span><span>${money(fac.subtotal)}</span></div>
     <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:13.5px;"><span>IVA (15%):</span><span>${money(fac.iva)}</span></div>
     <div style="display:flex; justify-content:space-between; font-weight:700; font-size:16px; color:var(--amber-bright); border-top:1px solid var(--cork-line); padding-top:6px;">
-      <span>Total:</span><span>${money(fac.total)}</span>
+      <span>Total de la Factura:</span><span>${money(fac.total)}</span>
     </div>
   `;
 
+  // Líneas
   document.getElementById('det-fac-lineas').innerHTML = (lineas||[]).map(l => {
     const esPersonal = !l.producto_id;
     return `
       <div class="cart-item">
-        <div>
+        <div style="flex:1; padding-right:8px;">
           <div class="cart-item-name">
             ${l.productos ? l.productos.nombre : l.nombre_detectado}
             ${esPersonal ? '<span class="badge badge-warn" style="margin-left:4px;">👤 Uso Personal</span>' : ''}
@@ -2586,7 +3053,44 @@ window.verDetalleFactura = async function(facturaId) {
   document.getElementById('modal-detalle-factura').classList.remove('hidden');
 };
 
-document.getElementById('btn-eliminar-factura').addEventListener('click', async () => {
+// Botones de acción individual en el modal de detalle
+document.getElementById('btn-det-download-pdf')?.addEventListener('click', async () => {
+  if(!currentFacturaObj) return;
+  showToast('Generando PDF con OCR…');
+  try {
+    const pdfBlob = await generateInvoicePDFBlob(currentFacturaObj, currentFacturaLines, currentFacturaImgUrl);
+    const fechaCompra = currentFacturaObj.fecha_emision || currentFacturaObj.fecha_registro.split('T')[0];
+    const facNum = (currentFacturaObj.numero_factura || `FAC_${currentFacturaObj.id}`).replace(/[/\\?%*:|"<>]/g, '-');
+    const fileName = `${fechaCompra}_Factura_${facNum}_OCR.pdf`;
+    
+    downloadBlob(pdfBlob, fileName);
+    showToast('PDF descargado exitosamente ✓');
+  } catch(e) {
+    showToast('Error generando PDF: ' + e.message, true);
+  }
+});
+
+document.getElementById('btn-det-download-img')?.addEventListener('click', async () => {
+  if(!currentFacturaImgUrl) return showToast('Esta factura no tiene imagen registrada en Supabase', true);
+  try {
+    showToast('Descargando imagen original…');
+    const res = await fetch(currentFacturaImgUrl);
+    const blob = await res.blob();
+    const fechaCompra = currentFacturaObj.fecha_emision || currentFacturaObj.fecha_registro.split('T')[0];
+    const facNum = (currentFacturaObj.numero_factura || `FAC_${currentFacturaObj.id}`).replace(/[/\\?%*:|"<>]/g, '-');
+    const ext = currentFacturaImgUrl.split('.').pop().split('?')[0] || 'jpg';
+    downloadBlob(blob, `${fechaCompra}_Factura_${facNum}_original.${ext}`);
+  } catch(e) {
+    window.open(currentFacturaImgUrl, '_blank');
+  }
+});
+
+document.getElementById('btn-det-export-folder')?.addEventListener('click', async () => {
+  if(!currentFacturaObj) return;
+  await exportFacturasOrganizadas([currentFacturaObj.id], 'zip');
+});
+
+document.getElementById('btn-eliminar-factura')?.addEventListener('click', async () => {
   if(!currentFacturaDetalleId || !confirm('¿Eliminar esta factura? El stock ingresado se revertirá automáticamente.')) return;
   try {
     await sb.from('facturas_compra').delete().eq('id', currentFacturaDetalleId);
@@ -2596,33 +3100,50 @@ document.getElementById('btn-eliminar-factura').addEventListener('click', async 
   } catch(e) { showToast('Error: ' + e.message, true); }
 });
 
-document.getElementById('btn-open-scan').addEventListener('click', () => {
-  document.getElementById('invoice-file').value = ''; tempFacturaData = null; currentInvoiceFile = null;
-  document.getElementById('invoice-preview-container').classList.add('hidden'); document.getElementById('invoice-results').classList.add('hidden');
-  document.getElementById('btn-process-invoice').disabled = true; document.getElementById('modal-scan').classList.remove('hidden');
+// =====================================================================
+// ESCANEO CON GEMINI 3.6 (EXTRACCIÓN COMPLETA CON EMPRESA Y RUC)
+// =====================================================================
+document.getElementById('btn-open-scan')?.addEventListener('click', () => {
+  document.getElementById('invoice-file').value = '';
+  tempFacturaData = null;
+  currentInvoiceFile = null;
+  document.getElementById('invoice-preview-container').classList.add('hidden');
+  document.getElementById('invoice-results').classList.add('hidden');
+  document.getElementById('btn-process-invoice').disabled = true;
+  document.getElementById('modal-scan').classList.remove('hidden');
 });
 
-document.getElementById('invoice-file').addEventListener('change', (e) => {
-  if(!e.target.files[0]) return; currentInvoiceFile = e.target.files[0];
+document.getElementById('invoice-file')?.addEventListener('change', (e) => {
+  if(!e.target.files[0]) return;
+  currentInvoiceFile = e.target.files[0];
   document.getElementById('invoice-preview-img').src = URL.createObjectURL(currentInvoiceFile);
-  document.getElementById('invoice-preview-container').classList.remove('hidden'); document.getElementById('btn-process-invoice').disabled = false;
+  document.getElementById('invoice-preview-container').classList.remove('hidden');
+  document.getElementById('btn-process-invoice').disabled = false;
 });
 
-document.getElementById('btn-process-invoice').addEventListener('click', async () => {
-  const key = localStorage.getItem('gemini_api_key'); if(!key) return showToast('Configura tu API Key primero', true);
-  const btn = document.getElementById('btn-process-invoice'); btn.disabled = true; btn.textContent = 'Analizando con Gemini 3.6...';
+document.getElementById('btn-process-invoice')?.addEventListener('click', async () => {
+  const key = localStorage.getItem('gemini_api_key');
+  if(!key) return showToast('Configura tu API Key de Gemini primero en Configuración', true);
+  if(!currentInvoiceFile) return showToast('Selecciona una imagen de factura', true);
+
+  const btn = document.getElementById('btn-process-invoice');
+  btn.disabled = true;
+  btn.textContent = 'Analizando comprobante con Gemini 3.6...';
   
   try {
     const b64 = (await fileToBase64(currentInvoiceFile)).split(',')[1];
-    const promptText = `Eres un experto contable y de inventarios en Ecuador. Analiza esta factura (ej: DINADEC, cervecerías o distribuidoras).
-    Devuelve ÚNICAMENTE un JSON válido y estricto (sin markdown):
+    const promptText = `Eres un experto contable y de inventarios en Ecuador. Analiza detalladamente esta factura comercial o comprobante de compra (ej: DINADEC, Cervecería Nacional, distribuidoras de licores).
+    Devuelve ÚNICAMENTE un JSON válido y estricto (sin bloques markdown ni comentarios):
     {
+      "empresa_emisor": "Nombre comercial o Razón Social de la empresa o distribuidora que emite la factura (ej: DINADEC S.A., Cervecería Nacional CN S.A., Distribuidora San Luis)",
+      "ruc_emisor": "RUC o identificación tributaria de 13 dígitos del emisor",
       "numero_factura": "001-001-000123456",
       "fecha_emision": "YYYY-MM-DD",
       "fecha_vencimiento": "YYYY-MM-DD",
       "subtotal": 100.00,
       "iva": 15.00,
       "total": 115.00,
+      "texto_ocr_completo": "Texto completo o resumen transcrito del comprobante para indexación y búsqueda",
       "items": [
         {
           "nombre_limpio": "Nombre comercial sin códigos ni sufijos x1, x1 UN, x6, etc. (Ej: 'Old Times Energy 750ml', 'Cerveza Corona 269ml')",
@@ -2636,25 +3157,42 @@ document.getElementById('btn-process-invoice').addEventListener('click', async (
       ]
     }
     REGLAS IMPORTANTES:
-    1. Si un producto dice 'X24U' o 'CAJA X24', unidades_por_bulto = 24.
-    2. Si dice '60mlx6' o '6 LATA', unidades_por_bulto = 6.
-    3. Si dice 'x1' o 'x1 UN', unidades_por_bulto = 1.
-    4. Líneas no inventariables como 'INTERESES', 'FLETES', 'DESCUENTOS', márcalas con es_servicio: true.
-    5. nombre_limpio DEBE remover 'x1', 'x1 UN', 'CAJA MQ', 'TERMO', 'NR' y dejar un nombre limpio y ordenado.`;
+    1. Identifica con precisión la empresa emisora en 'empresa_emisor' y el RUC en 'ruc_emisor'.
+    2. Si un producto dice 'X24U' o 'CAJA X24', unidades_por_bulto = 24.
+    3. Si dice '60mlx6' o '6 LATA', unidades_por_bulto = 6.
+    4. Si dice 'x1' o 'x1 UN', unidades_por_bulto = 1.
+    5. Líneas no inventariables como 'INTERESES', 'FLETES', 'DESCUENTOS', márcalas con es_servicio: true.
+    6. nombre_limpio DEBE remover 'x1', 'x1 UN', 'CAJA MQ', 'TERMO', 'NR' y dejar un nombre limpio y ordenado para el catálogo.`;
 
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${key}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [ { text: promptText }, { inline_data: { mime_type: currentInvoiceFile.type, data: b64 } } ] }] })
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { text: promptText },
+            { inline_data: { mime_type: currentInvoiceFile.type || 'image/jpeg', data: b64 } }
+          ]
+        }]
+      })
     });
 
-    const d = await res.json(); if(d.error) throw new Error(d.error.message);
-    tempFacturaData = JSON.parse(d.candidates[0].content.parts[0].text.replace(/```json/g,'').replace(/```/g,'').trim());
+    const d = await res.json();
+    if(d.error) throw new Error(d.error.message);
+    if(!d.candidates || !d.candidates[0]) throw new Error('No se recibió respuesta válida del modelo.');
 
+    const cleanText = d.candidates[0].content.parts[0].text.replace(/```json/g,'').replace(/```/g,'').trim();
+    tempFacturaData = JSON.parse(cleanText);
+
+    // Llenar campos del formulario
+    document.getElementById('scan-empresa').value = tempFacturaData.empresa_emisor || '';
+    document.getElementById('scan-ruc').value = tempFacturaData.ruc_emisor || '';
+    document.getElementById('scan-numero-factura').value = tempFacturaData.numero_factura || '';
     if(tempFacturaData.fecha_emision) document.getElementById('scan-fecha-emision').value = tempFacturaData.fecha_emision;
     if(tempFacturaData.fecha_vencimiento) document.getElementById('scan-fecha-vencimiento').value = tempFacturaData.fecha_vencimiento;
 
     document.getElementById('invoice-header-summary').innerHTML = `
-      <b>Factura:</b> ${tempFacturaData.numero_factura || 'S/N'} | 
+      <b>Empresa:</b> ${tempFacturaData.empresa_emisor || 'No identificada'} | 
       <b>Subtotal:</b> ${money(tempFacturaData.subtotal)} | 
       <b>IVA:</b> ${money(tempFacturaData.iva)} | 
       <b>Total:</b> ${money(tempFacturaData.total)}
@@ -2662,8 +3200,11 @@ document.getElementById('btn-process-invoice').addEventListener('click', async (
 
     renderMappingRows();
     document.getElementById('invoice-results').classList.remove('hidden');
-  } catch(e) { showToast('Error en lectura: ' + e.message, true); }
-  btn.disabled = false; btn.textContent = 'Procesar con IA';
+  } catch(e) {
+    showToast('Error en lectura OCR: ' + e.message, true);
+  }
+  btn.disabled = false;
+  btn.textContent = 'Procesar con IA';
 });
 
 function renderMappingRows() {
@@ -2698,7 +3239,7 @@ function renderMappingRows() {
         <div id="inv-details-section-${idx}">
           <div class="field" style="margin-bottom:6px;">
             <label>Nombre del Producto (Limpio):</label>
-            <input type="text" id="map-clean-name-${idx}" value="${nombreSugerido}" style="margin-bottom:0; font-weight:600;">
+            <input type="text" id="map-clean-name-${idx}" value="${escapeHtml(nombreSugerido)}" style="margin-bottom:0; font-weight:600;">
           </div>
 
           <div class="field-row" style="margin-bottom:6px;">
@@ -2726,8 +3267,8 @@ function renderMappingRows() {
           <div class="field" style="margin-bottom:6px;">
             <label>Vincular a inventario:</label>
             <select id="map-prod-${idx}" style="margin-bottom:0;">
-              <option value="__auto_create__" ${!match ? 'selected':''}>➕ Crear como nuevo producto ("${nombreSugerido}")</option>
-              ${productos.map(p => `<option value="${p.id}" ${match && match.id===p.id?'selected':''}>Vincular a: ${p.nombre} (Stock actual: ${p.stock_actual})</option>`).join('')}
+              <option value="__auto_create__" ${!match ? 'selected':''}>➕ Crear como nuevo producto ("${escapeHtml(nombreSugerido)}")</option>
+              ${productos.map(p => `<option value="${p.id}" ${match && match.id===p.id?'selected':''}>Vincular a: ${escapeHtml(p.nombre)} (Stock actual: ${p.stock_actual})</option>`).join('')}
             </select>
           </div>
 
@@ -2769,34 +3310,46 @@ window.recalcInvoiceLineTotals = function(idx) {
   document.getElementById(`map-unit-cost-badge-${idx}`).textContent = money(costoUnitarioConIva);
 };
 
-document.getElementById('btn-save-invoice').addEventListener('click', async () => {
+document.getElementById('btn-save-invoice')?.addEventListener('click', async () => {
   if(!tempFacturaData || !tempFacturaData.items) return;
-  const btn = document.getElementById('btn-save-invoice'); btn.disabled = true; btn.textContent = 'Guardando e ingresando stock...';
+  const btn = document.getElementById('btn-save-invoice');
+  btn.disabled = true;
+  btn.textContent = 'Guardando e ingresando stock...';
 
   try {
+    const empresaVal = document.getElementById('scan-empresa').value.trim() || 'Proveedor General';
+    const rucVal = document.getElementById('scan-ruc').value.trim() || null;
+    const numFacturaVal = document.getElementById('scan-numero-factura').value.trim() || null;
+    const fechaEmisionVal = document.getElementById('scan-fecha-emision').value || null;
+    const fechaVencVal = document.getElementById('scan-fecha-vencimiento').value || null;
+
+    tempFacturaData.empresa_emisor = empresaVal;
+    tempFacturaData.ruc_emisor = rucVal;
+    tempFacturaData.numero_factura = numFacturaVal;
+    tempFacturaData.fecha_emision = fechaEmisionVal;
+    tempFacturaData.fecha_vencimiento = fechaVencVal;
+
+    // 1. Insertar factura en Supabase
     const { data: fac, error: fErr } = await sb.from('facturas_compra').insert({
-      numero_factura: tempFacturaData.numero_factura || null,
-      fecha_emision: document.getElementById('scan-fecha-emision').value || null,
-      fecha_vencimiento: document.getElementById('scan-fecha-vencimiento').value || null,
+      numero_factura: numFacturaVal,
+      fecha_emision: fechaEmisionVal,
+      fecha_vencimiento: fechaVencVal,
       subtotal: tempFacturaData.subtotal || 0,
       iva: tempFacturaData.iva || 0,
       total: tempFacturaData.total || 0,
       datos_ocr_raw: tempFacturaData,
       estado: 'procesada'
     }).select().single();
+    
     if(fErr) throw fErr;
 
+    // 2. Subir imagen original a Supabase Storage y registrarla
     if(currentInvoiceFile){
-      const imgPath = `facturas/${fac.id}_${Date.now()}_${currentInvoiceFile.name}`;
-      if(!(await sb.storage.from(BUCKET_PRODUCTOS).upload(imgPath, currentInvoiceFile)).error){
-        await sb.from('imagenes_factura').insert({
-          factura_id: fac.id,
-          url_imagen: sb.storage.from(BUCKET_PRODUCTOS).getPublicUrl(imgPath).data.publicUrl,
-          es_principal: true
-        });
-      }
+      showToast('Guardando foto original en Supabase Storage…');
+      await uploadInvoiceImageToSupabase(fac.id, currentInvoiceFile);
     }
 
+    // 3. Procesar líneas e inventario
     const inventariables = (tempFacturaData.items || []).filter(it => !it.es_servicio);
     const detalles = [];
 
@@ -2825,7 +3378,7 @@ document.getElementById('btn-save-invoice').addEventListener('click', async () =
             unidad_base: 'unidad',
             precio_sin_iva: puSinIva,
             iva_porcentaje: 15.00,
-            stock_actual: 0,
+            stock_actual: totalUnidades,
             stock_minimo: 5,
             activo: true,
             fecha_caducidad: fechaCaducidad
@@ -2849,6 +3402,7 @@ document.getElementById('btn-save-invoice').addEventListener('click', async () =
             presId = (prod.presentaciones_producto && prod.presentaciones_producto[0]) ? prod.presentaciones_producto[0].id : null;
             await sb.from('productos').update({
               precio_sin_iva: puSinIva,
+              stock_actual: (prod.stock_actual || 0) + totalUnidades,
               fecha_caducidad: fechaCaducidad || prod.fecha_caducidad
             }).eq('id', prod.id);
           }
@@ -2868,15 +3422,390 @@ document.getElementById('btn-save-invoice').addEventListener('click', async () =
       });
     }
 
-    await sb.from('detalle_factura_compra').insert(detalles);
+    if(detalles.length > 0) {
+      await sb.from('detalle_factura_compra').insert(detalles);
+    }
+
     showToast('Factura guardada e inventario actualizado ✓');
     document.getElementById('modal-scan').classList.add('hidden');
     await loadFacturas();
     await loadProductos();
     await loadCombos();
-  } catch(e) { showToast('Error: ' + e.message, true); }
-  btn.disabled = false; btn.textContent = 'Guardar e Ingresar Stock';
+  } catch(e) {
+    showToast('Error al guardar factura: ' + e.message, true);
+  }
+  btn.disabled = false;
+  btn.textContent = 'Guardar e Ingresar Stock';
 });
+
+// =====================================================================
+// GENERADOR DE PDF CON OCR INTEGRADO (JSPDF + AUTOTABLE)
+// =====================================================================
+async function generateInvoicePDFBlob(fac, lineas, imgUrl) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' });
+
+  const empName = fac.datos_ocr_raw?.empresa_emisor || 'Proveedor General';
+  const ruc = fac.datos_ocr_raw?.ruc_emisor || 'N/A';
+  const numFac = fac.numero_factura || `FAC-${fac.id}`;
+  const fechaCompra = fac.fecha_emision || fac.fecha_registro.split('T')[0];
+  const fechaVenc = fac.fecha_vencimiento || 'Contado';
+
+  // Encabezado decorativo
+  doc.setFillColor(36, 24, 17); // wood-900
+  doc.rect(0, 0, 210, 26, 'F');
+  
+  doc.setTextColor(232, 180, 90); // amber
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(18);
+  doc.text('BARRIL · COMPROBANTE DE COMPRA CON OCR', 14, 14);
+
+  doc.setFontSize(10);
+  doc.setTextColor(242, 233, 220); // cream
+  doc.setFont('helvetica', 'normal');
+  doc.text('Sistema Integral de Inventario & Gestión de Facturas', 14, 20);
+
+  // Cuadro de Datos de la Factura y Empresa
+  doc.setDrawColor(77, 58, 38);
+  doc.setFillColor(248, 246, 242);
+  doc.roundedRect(14, 32, 182, 34, 3, 3, 'FD');
+
+  doc.setTextColor(40, 40, 40);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text(`Empresa Emisora: ${empName}`, 18, 40);
+  
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9.5);
+  doc.text(`RUC: ${ruc}`, 18, 47);
+  doc.text(`N° Factura: ${numFac}`, 18, 54);
+  doc.text(`ID Registro: #${fac.id}`, 18, 61);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text(`Fecha de Compra: ${fechaCompra}`, 115, 40);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Vencimiento Pago: ${fechaVenc}`, 115, 47);
+  doc.text(`Registrada: ${new Date(fac.fecha_registro).toLocaleString()}`, 115, 54);
+  doc.text(`Estado: ${fac.estado || 'procesada'}`, 115, 61);
+
+  // Tabla de Productos / Líneas
+  const tableRows = (lineas || []).map((l, i) => {
+    const name = l.productos ? l.productos.nombre : (l.nombre_detectado || 'Ítem');
+    const tipo = l.producto_id ? 'Inventario' : 'Uso Personal';
+    const cant = l.cantidad || 1;
+    const puSin = money(l.precio_unitario_sin_iva || 0);
+    const puCon = money(l.precio_unitario_con_iva || 0);
+    const sub = money(l.subtotal || 0);
+    return [i + 1, name, tipo, cant, puSin, puCon, sub];
+  });
+
+  doc.autoTable({
+    startY: 70,
+    head: [['#', 'Producto / Detalle', 'Destino', 'Unidades', 'P. Unit s/IVA', 'P. Unit c/IVA', 'Subtotal']],
+    body: tableRows,
+    theme: 'grid',
+    headStyles: {
+      fillColor: [67, 48, 31],
+      textColor: [242, 233, 220],
+      fontSize: 9,
+      fontStyle: 'bold'
+    },
+    bodyStyles: {
+      fontSize: 8.5,
+      textColor: [30, 30, 30]
+    },
+    alternateRowStyles: {
+      fillColor: [248, 246, 242]
+    },
+    columnStyles: {
+      0: { cellWidth: 8, halign: 'center' },
+      1: { cellWidth: 'auto' },
+      2: { cellWidth: 24, halign: 'center' },
+      3: { cellWidth: 18, halign: 'center' },
+      4: { cellWidth: 22, halign: 'right' },
+      5: { cellWidth: 22, halign: 'right' },
+      6: { cellWidth: 24, halign: 'right', fontStyle: 'bold' }
+    }
+  });
+
+  let finalY = doc.lastAutoTable.finalY + 8;
+  if(finalY > 240) {
+    doc.addPage();
+    finalY = 20;
+  }
+
+  // Cuadro de Resumen Financiero
+  doc.setDrawColor(77, 58, 38);
+  doc.setFillColor(248, 246, 242);
+  doc.roundedRect(120, finalY, 76, 28, 2, 2, 'FD');
+
+  doc.setFontSize(9.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setTextColor(50, 50, 50);
+  doc.text(`Subtotal:`, 124, finalY + 7);
+  doc.text(`${money(fac.subtotal)}`, 190, finalY + 7, { align: 'right' });
+
+  doc.text(`IVA (15%):`, 124, finalY + 14);
+  doc.text(`${money(fac.iva)}`, 190, finalY + 14, { align: 'right' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(193, 80, 46);
+  doc.text(`Total Factura:`, 124, finalY + 23);
+  doc.text(`${money(fac.total)}`, 190, finalY + 23, { align: 'right' });
+
+  // Transcripción OCR Indexable
+  finalY += 34;
+  if(finalY > 250) {
+    doc.addPage();
+    finalY = 20;
+  }
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(67, 48, 31);
+  doc.text('Transcripción OCR / Datos de Indexación:', 14, finalY);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(90, 90, 90);
+  const ocrText = fac.datos_ocr_raw?.texto_ocr_completo || 
+    `Factura #${numFac} emitida por ${empName} (RUC ${ruc}) el ${fechaCompra}. Total ${money(fac.total)}. Ítems: ${(lineas||[]).map(l=>l.nombre_detectado||'').join(', ')}`;
+  
+  const splitOcr = doc.splitTextToSize(ocrText, 182);
+  doc.text(splitOcr.slice(0, 10), 14, finalY + 5);
+
+  // Página 2: Imagen Original Anexa en Alta Resolución
+  if(imgUrl) {
+    try {
+      doc.addPage();
+      doc.setFillColor(36, 24, 17);
+      doc.rect(0, 0, 210, 18, 'F');
+      doc.setTextColor(232, 180, 90);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(13);
+      doc.text(`FOTO ORIGINAL DE FACTURA #${numFac}`, 14, 12);
+
+      const imgBlob = await (await fetch(imgUrl)).blob();
+      const imgB64 = await blobToBase64(imgBlob);
+      const imgFormat = imgUrl.toLowerCase().includes('.png') ? 'PNG' : 'JPEG';
+
+      // Dibujar imagen ajustada a la página
+      doc.addImage(imgB64, imgFormat, 14, 24, 182, 255, undefined, 'FAST');
+    } catch(errImg) {
+      console.warn('No se pudo incrustar la imagen original en el PDF:', errImg);
+    }
+  }
+
+  return doc.output('blob');
+}
+
+function blobToBase64(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, 500);
+}
+
+function sanitizeFolderName(str) {
+  if(!str) return 'Empresa_General';
+  return str.trim()
+    .replace(/[/\\?%*:|"<>]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/_+/g, '_')
+    .substring(0, 60);
+}
+
+// =====================================================================
+// EXPORTADOR JERÁRQUICO EN CARPETAS (EMPRESA / AÑO / FECHA_COMPRA)
+// =====================================================================
+document.getElementById('btn-open-export-modal')?.addEventListener('click', () => {
+  populateEmpresaFilterDropdown();
+  updateExportSummary();
+  document.getElementById('export-progress-wrap').classList.add('hidden');
+  document.getElementById('modal-export-facturas').classList.remove('hidden');
+});
+
+window.toggleCustomExportDates = function() {
+  const p = document.getElementById('export-filter-periodo').value;
+  document.getElementById('export-custom-dates').classList.toggle('hidden', p !== 'custom');
+};
+
+function getFilteredFacturasForExport() {
+  const emp = document.getElementById('export-filter-empresa').value;
+  const periodo = document.getElementById('export-filter-periodo').value;
+  const now = new Date();
+
+  let fromDate = null;
+  let toDate = null;
+
+  if(periodo === 'mes') {
+    fromDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+  } else if(periodo === 'anio') {
+    fromDate = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0];
+  } else if(periodo === 'custom') {
+    fromDate = document.getElementById('export-date-from').value;
+    toDate = document.getElementById('export-date-to').value;
+  }
+
+  return facturasData.filter(f => {
+    const fEmp = (f.datos_ocr_raw?.empresa_emisor || '').trim();
+    if(emp !== 'ALL' && fEmp !== emp) return false;
+
+    const fFecha = (f.fecha_emision || f.fecha_registro || '').split('T')[0];
+    if(fromDate && fFecha < fromDate) return false;
+    if(toDate && fFecha > toDate) return false;
+
+    return true;
+  });
+}
+
+window.updateExportSummary = function() {
+  const list = getFilteredFacturasForExport();
+  const summary = document.getElementById('export-summary-box');
+  if(!summary) return;
+
+  const conFoto = list.filter(f => (f.imagenes_factura && f.imagenes_factura.length > 0) || f.datos_ocr_raw?.url_imagen).length;
+  summary.innerHTML = `📊 Se exportarán <b>${list.length} factura(s)</b> (${conFoto} con foto original) distribuidas en carpetas por Empresa y Fechas.`;
+};
+
+document.getElementById('btn-start-export-filesystem')?.addEventListener('click', async () => {
+  const list = getFilteredFacturasForExport();
+  if(!list.length) return showToast('No hay facturas para exportar con estos filtros', true);
+  await exportFacturasOrganizadas(list.map(f => f.id), 'filesystem');
+});
+
+document.getElementById('btn-start-export-zip')?.addEventListener('click', async () => {
+  const list = getFilteredFacturasForExport();
+  if(!list.length) return showToast('No hay facturas para exportar con estos filtros', true);
+  await exportFacturasOrganizadas(list.map(f => f.id), 'zip');
+});
+
+async function exportFacturasOrganizadas(facturaIds, mode = 'zip') {
+  const list = facturasData.filter(f => facturaIds.includes(f.id));
+  if(!list.length) return showToast('No se encontraron facturas seleccionadas', true);
+
+  const progressWrap = document.getElementById('export-progress-wrap');
+  const progressBar = document.getElementById('export-progress-bar');
+  const progressText = document.getElementById('export-progress-text');
+  
+  if(progressWrap) progressWrap.classList.remove('hidden');
+
+  let rootDirHandle = null;
+  if(mode === 'filesystem') {
+    if(!window.showDirectoryPicker) {
+      showToast('Tu navegador no soporta guardado directo en carpetas. Se descargará como archivo ZIP organizado.', true);
+      mode = 'zip';
+    } else {
+      try {
+        rootDirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+      } catch(cancelErr) {
+        if(progressWrap) progressWrap.classList.add('hidden');
+        return;
+      }
+    }
+  }
+
+  const zip = (mode === 'zip') ? new window.JSZip() : null;
+  const total = list.length;
+
+  for(let i = 0; i < total; i++) {
+    const fac = list[i];
+    const percent = Math.round(((i + 1) / total) * 100);
+    
+    if(progressBar) progressBar.style.width = `${percent}%`;
+    if(progressText) progressText.textContent = `Procesando factura ${i + 1} de ${total} (#${fac.numero_factura || fac.id})…`;
+
+    // 1. Obtener datos y líneas completas de Supabase
+    const { data: lineas } = await sb.from('detalle_factura_compra').select('*, productos(nombre)').eq('factura_id', fac.id);
+    const imgUrl = (fac.imagenes_factura && fac.imagenes_factura[0]?.url_imagen) || fac.datos_ocr_raw?.url_imagen || null;
+
+    // 2. Generar PDF con OCR
+    const pdfBlob = await generateInvoicePDFBlob(fac, lineas || [], imgUrl);
+
+    // 3. Estructura de nombres y carpetas
+    const empresaFolder = sanitizeFolderName(fac.datos_ocr_raw?.empresa_emisor || 'Empresa_General');
+    const fechaCompra = fac.fecha_emision || fac.fecha_registro.split('T')[0];
+    const anioFolder = fechaCompra.split('-')[0] || '2026';
+    const fechaFolder = fechaCompra;
+    const facNum = (fac.numero_factura || `FAC_${fac.id}`).replace(/[/\\?%*:|"<>]/g, '-');
+
+    const pdfFileName = `${fechaCompra}_Factura_${facNum}_OCR.pdf`;
+    
+    let imgBlob = null;
+    let imgFileName = null;
+    if(imgUrl) {
+      try {
+        const imgRes = await fetch(imgUrl);
+        imgBlob = await imgRes.blob();
+        const ext = imgUrl.split('.').pop().split('?')[0] || 'jpg';
+        imgFileName = `${fechaCompra}_Factura_${facNum}_original.${ext}`;
+      } catch(e) {
+        console.warn(`No se pudo descargar la imagen para factura ${fac.id}:`, e);
+      }
+    }
+
+    if(mode === 'filesystem' && rootDirHandle) {
+      // Crear jerarquía: [Empresa] -> [Año] -> [Fecha_Compra]
+      const empDir = await rootDirHandle.getDirectoryHandle(empresaFolder, { create: true });
+      const yearDir = await empDir.getDirectoryHandle(anioFolder, { create: true });
+      const dateDir = await yearDir.getDirectoryHandle(fechaFolder, { create: true });
+
+      // Guardar PDF con OCR
+      const pdfFileHandle = await dateDir.getFileHandle(pdfFileName, { create: true });
+      const pdfWritable = await pdfFileHandle.createWritable();
+      await pdfWritable.write(pdfBlob);
+      await pdfWritable.close();
+
+      // Guardar Imagen Original
+      if(imgBlob && imgFileName) {
+        const imgFileHandle = await dateDir.getFileHandle(imgFileName, { create: true });
+        const imgWritable = await imgFileHandle.createWritable();
+        await imgWritable.write(imgBlob);
+        await imgWritable.close();
+      }
+    } else if(mode === 'zip' && zip) {
+      // Agregar al ZIP estructurado
+      const zipFolder = zip.folder(empresaFolder).folder(anioFolder).folder(fechaFolder);
+      zipFolder.file(pdfFileName, pdfBlob);
+      if(imgBlob && imgFileName) {
+        zipFolder.file(imgFileName, imgBlob);
+      }
+    }
+  }
+
+  if(mode === 'zip' && zip) {
+    if(progressText) progressText.textContent = 'Empaquetando archivo ZIP…';
+    const zipBlob = await zip.generateAsync({ type: 'blob' });
+    const todayStr = new Date().toISOString().split('T')[0];
+    downloadBlob(zipBlob, `Facturas_Barril_Organizadas_${todayStr}.zip`);
+    showToast('¡Archivo ZIP descargado con todas las carpetas y facturas! ✓');
+  } else if(mode === 'filesystem') {
+    showToast('¡Facturas guardadas y organizadas exitosamente en tu carpeta seleccionada! ✓');
+  }
+
+  if(progressWrap) {
+    setTimeout(() => {
+      progressWrap.classList.add('hidden');
+      document.getElementById('modal-export-facturas')?.classList.add('hidden');
+    }, 1500);
+  }
+}
 </script>
 </body>
 </html>
