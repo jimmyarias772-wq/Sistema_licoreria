@@ -3429,23 +3429,26 @@ document.getElementById('btn-process-invoice')?.addEventListener('click', async 
       "texto_ocr_completo": "Texto completo o resumen transcrito del comprobante para indexación y búsqueda",
       "items": [
         {
-          "nombre_limpio": "Nombre comercial sin códigos ni sufijos x1, x1 UN, x6, etc. (Ej: 'Old Times Energy 750ml', 'Cerveza Corona 269ml')",
+          "nombre_limpio": "Nombre comercial sin códigos ni sufijos x1, x1 UN, etc. (Ej: 'Old Times Energy 750ml', 'Cerveza Corona 269ml')",
           "nombre_original": "Texto original de la factura",
-          "bultos": 3,
-          "unidades_por_bulto": 24,
-          "precio_bulto_sin_iva": 19.13,
-          "subtotal": 57.39,
+          "cantidad_factura": 12,
+          "precio_unitario_sin_iva": 1.50,
+          "subtotal": 18.00,
+          "es_caja_o_pack": false,
+          "unidades_por_caja": 1,
           "es_servicio": false
         }
       ]
     }
-    REGLAS IMPORTANTES:
-    1. Identifica con precisión la empresa emisora en 'empresa_emisor' y el RUC en 'ruc_emisor'.
-    2. Si un producto dice 'X24U' o 'CAJA X24', unidades_por_bulto = 24.
-    3. Si dice '60mlx6' o '6 LATA', unidades_por_bulto = 6.
-    4. Si dice 'x1' o 'x1 UN', unidades_por_bulto = 1.
-    5. Líneas no inventariables como 'INTERESES', 'FLETES', 'DESCUENTOS', márcalas con es_servicio: true.
-    6. nombre_limpio DEBE remover 'x1', 'x1 UN', 'CAJA MQ', 'TERMO', 'NR' y dejar un nombre limpio y ordenado para el catálogo.`;
+    REGLAS CRÍTICAS PARA CANTIDADES Y UNIDADES:
+    1. 'cantidad_factura': Es el número EXACTO en la columna 'CANTIDAD' de la factura (ej: 12, 6, 24, 1). NUNCA inventes ni multipliques números aquí.
+    2. 'precio_unitario_sin_iva': Es el precio en la columna 'PRECIO UNITARIO' o 'VALOR UNITARIO' (sin IVA).
+    3. 'es_caja_o_pack' y 'unidades_por_caja':
+       - Si la cantidad ya representa las unidades sueltas o botellas (ej: CANTIDAD: 12 botellas a $1.50), 'es_caja_o_pack' es FALSE y 'unidades_por_caja' es 1.
+       - NUNCA pongas unidades_por_caja > 1 solo porque el nombre del producto dice 'X1', 'X2' o 'SIXPACK' si la factura ya cobró por unidad suelta.
+       - SOLO pon 'es_caja_o_pack': true y 'unidades_por_caja': 24 si la factura dice explícitamente CANTIDAD: 1 con DESCRIPCIÓN: JABA X 24 o CAJA X 24 a precio de bulto completo.
+    4. 'nombre_limpio': Limpia códigos de distribuidora ('x1', 'x1 UN', 'CAJA MQ', 'TERMO', 'NR', 'RET') dejando el nombre claro para catálogo.
+    5. Líneas no inventariables como 'INTERESES', 'FLETES', 'DESCUENTOS', 'RECARGOS', márcalas con es_servicio: true.`;
 
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${key}`, {
       method: 'POST',
@@ -3514,12 +3517,13 @@ function renderMappingRows() {
   container.innerHTML = inventariables.map((item, idx) => {
     const nombreSugerido = item.nombre_limpio || item.nombre_original;
     const match = productos.find(p => p.nombre.toLowerCase().includes(nombreSugerido.toLowerCase().substring(0, 5)));
-    const bultos = item.bultos || item.cantidad || 1;
-    const factor = item.unidades_por_bulto || 1;
-    const totalUnidades = bultos * factor;
+    const cantFacturada = item.cantidad_factura || item.bultos || item.cantidad || 1;
+    const esCaja = Boolean(item.es_caja_o_pack && item.unidades_por_caja && item.unidades_por_caja > 1);
+    const factor = esCaja ? (item.unidades_por_caja || 1) : 1;
+    const puFacturaSinIva = item.precio_unitario_sin_iva || (item.subtotal ? item.subtotal / cantFacturada : (item.precio_bulto_sin_iva || 0));
 
-    const precioBulto = item.precio_bulto_sin_iva || (item.subtotal / bultos);
-    const costoUnitarioSinIva = factor > 0 ? (precioBulto / factor) : precioBulto;
+    const totalUnidades = cantFacturada * factor;
+    const costoUnitarioSinIva = factor > 0 ? (puFacturaSinIva / factor) : puFacturaSinIva;
     const costoUnitarioConIva = costoUnitarioSinIva * 1.15;
 
     return `
@@ -3547,26 +3551,36 @@ function renderMappingRows() {
             <input type="text" id="map-clean-name-${idx}" value="${escapeHtml(nombreSugerido)}" style="margin-bottom:0; font-weight:600;">
           </div>
 
-          <!-- Bultos, Factor y Precio -->
+          <!-- Selector de Modo de Empaque -->
+          <div style="display:flex; gap:6px; margin-bottom:8px;">
+            <button type="button" class="btn ${!esCaja ? 'btn-primary' : 'btn-ghost'}" id="btn-mode-unit-${idx}" onclick="setLinePackMode(${idx}, 'unit')" style="flex:1; padding:6px 10px; font-size:11.5px;">
+              🔹 Unidades Directas (x1)
+            </button>
+            <button type="button" class="btn ${esCaja ? 'btn-primary' : 'btn-ghost'}" id="btn-mode-pack-${idx}" onclick="setLinePackMode(${idx}, 'pack')" style="flex:1; padding:6px 10px; font-size:11.5px;">
+              📦 Caja / Pack (Multiplicar)
+            </button>
+          </div>
+
+          <!-- Campos de Entrada -->
           <div class="field-row" style="margin-bottom:8px; gap:8px;">
-            <div class="field" style="margin-bottom:0;">
-              <label>Cajas / Bultos</label>
-              <input type="number" id="map-bultos-${idx}" value="${bultos}" min="1" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700;">
+            <div class="field" style="margin-bottom:0; flex:1;">
+              <label id="lbl-bultos-${idx}">${esCaja ? 'N° Cajas / Packs' : 'Cantidad Facturada'}</label>
+              <input type="number" id="map-bultos-${idx}" value="${cantFacturada}" min="1" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700;">
             </div>
-            <div class="field" style="margin-bottom:0;">
+            <div class="field ${!esCaja ? 'hidden' : ''}" id="field-factor-${idx}" style="margin-bottom:0; flex:1;">
               <label>Unidades x Caja</label>
               <input type="number" id="map-factor-${idx}" value="${factor}" min="1" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700;">
             </div>
-            <div class="field" style="margin-bottom:0;">
-              <label>Precio Caja s/IVA</label>
-              <input type="number" step="0.01" id="map-precio-bulto-${idx}" value="${precioBulto.toFixed(2)}" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700;">
+            <div class="field" style="margin-bottom:0; flex:1.2;">
+              <label id="lbl-precio-${idx}">${esCaja ? 'Precio Caja s/IVA' : 'Precio Unitario s/IVA'}</label>
+              <input type="number" step="0.01" id="map-precio-bulto-${idx}" value="${puFacturaSinIva.toFixed(2)}" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700;">
             </div>
           </div>
 
           <!-- Resumen de Stock & Costo Inmediato -->
           <div class="invoice-line-calc-box">
             <div>
-              <span style="font-size:11px; text-transform:uppercase; color:var(--cream-faint); display:block; font-weight:600;">Stock a Ingresar</span>
+              <span style="font-size:11px; text-transform:uppercase; color:var(--cream-faint); display:block; font-weight:600;">Stock Real a Ingresar</span>
               <b id="map-total-units-badge-${idx}" style="color:var(--good-bright); font-size:15px; font-family:var(--font-mono);">+${totalUnidades} unidades</b>
             </div>
             <div style="text-align:right;">
@@ -3604,6 +3618,33 @@ function renderMappingRows() {
   }).join('');
 }
 
+window.setLinePackMode = function(idx, mode) {
+  const isUnit = mode === 'unit';
+  const factorField = document.getElementById(`field-factor-${idx}`);
+  const factorInput = document.getElementById(`map-factor-${idx}`);
+  const btnUnit = document.getElementById(`btn-mode-unit-${idx}`);
+  const btnPack = document.getElementById(`btn-mode-pack-${idx}`);
+  const lblBultos = document.getElementById(`lbl-bultos-${idx}`);
+  const lblPrecio = document.getElementById(`lbl-precio-${idx}`);
+
+  if(isUnit) {
+    factorField?.classList.add('hidden');
+    if(factorInput) factorInput.value = 1;
+    if(btnUnit) btnUnit.className = 'btn btn-primary';
+    if(btnPack) btnPack.className = 'btn btn-ghost';
+    if(lblBultos) lblBultos.textContent = 'Cantidad Facturada';
+    if(lblPrecio) lblPrecio.textContent = 'Precio Unitario s/IVA';
+  } else {
+    factorField?.classList.remove('hidden');
+    if(factorInput && parseInt(factorInput.value, 10) <= 1) factorInput.value = 24;
+    if(btnUnit) btnUnit.className = 'btn btn-ghost';
+    if(btnPack) btnPack.className = 'btn btn-primary';
+    if(lblBultos) lblBultos.textContent = 'N° Cajas / Packs';
+    if(lblPrecio) lblPrecio.textContent = 'Precio por Caja s/IVA';
+  }
+  recalcInvoiceLineTotals(idx);
+};
+
 window.toggleInventariarItem = function(idx) {
   const isChecked = document.getElementById(`map-inventariar-${idx}`).checked;
   const card = document.getElementById(`inv-card-${idx}`);
@@ -3624,7 +3665,8 @@ window.toggleInventariarItem = function(idx) {
 
 window.recalcInvoiceLineTotals = function(idx) {
   const bultos = parseInt(document.getElementById(`map-bultos-${idx}`).value, 10) || 0;
-  const factor = parseInt(document.getElementById(`map-factor-${idx}`).value, 10) || 1;
+  const factorInput = document.getElementById(`map-factor-${idx}`);
+  const factor = factorInput ? (parseInt(factorInput.value, 10) || 1) : 1;
   const precioBulto = parseFloat(document.getElementById(`map-precio-bulto-${idx}`).value) || 0;
 
   const totalUnidades = bultos * factor;
