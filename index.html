@@ -3415,40 +3415,54 @@ document.getElementById('btn-process-invoice')?.addEventListener('click', async 
   
   try {
     const b64 = (await fileToBase64(currentInvoiceFile)).split(',')[1];
-    const promptText = `Eres un experto contable y de inventarios en Ecuador. Analiza detalladamente esta factura comercial o comprobante de compra (ej: DINADEC, Cervecería Nacional, distribuidoras de licores).
+    const promptText = `Eres un experto contable y de inventarios en Ecuador especializado en facturas y notas de entrega de distribuidoras de licores y consumo masivo (AZENDE LOGISTICS, DINADEC, CERVECERÍA NACIONAL, DIAGEO, etc.).
     Devuelve ÚNICAMENTE un JSON válido y estricto (sin bloques markdown ni comentarios):
     {
-      "empresa_emisor": "Nombre comercial o Razón Social de la empresa o distribuidora que emite la factura (ej: DINADEC S.A., Cervecería Nacional CN S.A., Distribuidora San Luis)",
-      "ruc_emisor": "RUC o identificación tributaria de 13 dígitos del emisor",
-      "numero_factura": "001-001-000123456",
+      "empresa_emisor": "Nombre comercial o Razón Social (ej: AZENDE LOGISTICS CIA. LTDA., DINADEC S.A., Cervecería Nacional)",
+      "ruc_emisor": "RUC de 13 dígitos del emisor",
+      "numero_factura": "047-001-000045822",
       "fecha_emision": "YYYY-MM-DD",
       "fecha_vencimiento": "YYYY-MM-DD",
-      "subtotal": 100.00,
-      "iva": 15.00,
-      "total": 115.00,
-      "texto_ocr_completo": "Texto completo o resumen transcrito del comprobante para indexación y búsqueda",
+      "subtotal": 55.94,
+      "iva": 8.39,
+      "total": 64.33,
+      "texto_ocr_completo": "Texto completo transcrito",
       "items": [
         {
-          "nombre_limpio": "Nombre comercial sin códigos ni sufijos x1, x1 UN, etc. (Ej: 'Old Times Energy 750ml', 'Cerveza Corona 269ml')",
-          "nombre_original": "Texto original de la factura",
-          "cantidad_factura": 12,
-          "precio_unitario_sin_iva": 1.50,
-          "subtotal": 18.00,
-          "es_caja_o_pack": false,
-          "unidades_por_caja": 1,
+          "nombre_limpio": "Nombre comercial claro con su variante de sabor/volumen (ej: 'Switch Bongo 2000cc', 'Zhumir Pink Cl + Maní Zh 50g', 'Zhumir Coco + Maní Zh 50g')",
+          "nombre_original": "Texto original del ítem",
+          "sub_empaque": 12,
+          "cajas": 0,
+          "unidades_sueltas": 8,
+          "unidades_totales": 8,
+          "precio_unitario_sin_iva": 3.4257,
+          "subtotal": 27.41,
           "es_servicio": false
         }
       ]
     }
-    REGLAS CRÍTICAS PARA CANTIDADES Y UNIDADES:
-    1. 'cantidad_factura': Es el número EXACTO en la columna 'CANTIDAD' de la factura (ej: 12, 6, 24, 1). NUNCA inventes ni multipliques números aquí.
-    2. 'precio_unitario_sin_iva': Es el precio en la columna 'PRECIO UNITARIO' o 'VALOR UNITARIO' (sin IVA).
-    3. 'es_caja_o_pack' y 'unidades_por_caja':
-       - Si la cantidad ya representa las unidades sueltas o botellas (ej: CANTIDAD: 12 botellas a $1.50), 'es_caja_o_pack' es FALSE y 'unidades_por_caja' es 1.
-       - NUNCA pongas unidades_por_caja > 1 solo porque el nombre del producto dice 'X1', 'X2' o 'SIXPACK' si la factura ya cobró por unidad suelta.
-       - SOLO pon 'es_caja_o_pack': true y 'unidades_por_caja': 24 si la factura dice explícitamente CANTIDAD: 1 con DESCRIPCIÓN: JABA X 24 o CAJA X 24 a precio de bulto completo.
-    4. 'nombre_limpio': Limpia códigos de distribuidora ('x1', 'x1 UN', 'CAJA MQ', 'TERMO', 'NR', 'RET') dejando el nombre claro para catálogo.
-    5. Líneas no inventariables como 'INTERESES', 'FLETES', 'DESCUENTOS', 'RECARGOS', márcalas con es_servicio: true.`;
+
+    REGLAS FUNDAMENTALES PARA FACTURAS DE DISTRIBUIDORAS EN ECUADOR (AZENDE, DINADEC, ETC.):
+    1. ENCABEZADOS DE CANTIDAD CON SUB-COLUMNAS:
+       Las facturas de licores dividen la sección 'CANTIDAD' en 3 subcolumnas:
+       - 'SUB' (o empaque): Unidades que contiene una caja cerrada (ej: 6, 12, 24). Ponlo en 'sub_empaque'.
+       - 'CAJA': Número de cajas completas pedidas. Ponlo en 'cajas'.
+       - 'UNIDAD': Número de botellas/unidades sueltas pedidas. Ponlo en 'unidades_sueltas'.
+       - 'unidades_totales': DEBE ser EXACTAMENTE: (cajas * sub_empaque) + unidades_sueltas.
+         Ejemplos reales de la factura:
+         * SWITCH BONGO: SUB=6, CAJA=1, UNIDAD=0 -> unidades_totales = (1 * 6) + 0 = 6 unidades.
+         * ZHUMIR PINK: SUB=12, CAJA=0, UNIDAD=8 -> unidades_totales = (0 * 12) + 8 = 8 unidades.
+         * ZHUMIR COCO: SUB=12, CAJA=0, UNIDAD=4 -> unidades_totales = (0 * 12) + 4 = 4 unidades.
+       Si la factura es simple (una sola columna de cantidad), pon sub_empaque=1, cajas=0, unidades_sueltas=cantidad, unidades_totales=cantidad.
+
+    2. VALOR UNITARIO Y SUBTOTAL:
+       - 'precio_unitario_sin_iva': Es el 'VALOR UNITARIO' por botella o unidad individual (sin IVA), ej: 2.9617 o 3.4257.
+       - 'subtotal': Es el valor en la columna SUBTOTAL de la línea (ej: 17.77, 27.41, 13.70).
+       - Sanity check: 'unidades_totales * precio_unitario_sin_iva' debe coincidir aproximadamente con el subtotal.
+
+    3. NOMBRES Y VARIANTES (CRÍTICO):
+       - Conserva SIEMPRE intacta la variante de sabor o tipo en 'nombre_limpio' (ej: 'Pink', 'Coco', 'Seco', 'Black', 'Bongo 2000cc', 'Limon'). NUNCA unas dos sabores o variantes distintas bajo el mismo nombre.
+       - Líneas no inventariables como 'FLETES', 'INTERESES', 'DESCUENTOS', márcalas con es_servicio: true.`;
 
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${key}`, {
       method: 'POST',
@@ -3505,6 +3519,55 @@ document.getElementById('btn-process-invoice')?.addEventListener('click', async 
   btn.textContent = 'Procesar con IA';
 });
 
+// Función inteligente de coincidencia de productos evitando confusiones entre variantes (ej: Pink vs Coco)
+function findBestProductMatch(nombreLimpio) {
+  if(!nombreLimpio || !productos || !productos.length) return null;
+  const cleanTarget = nombreLimpio.toLowerCase().trim();
+  
+  // 1. Coincidencia exacta completa
+  const exact = productos.find(p => p.nombre.toLowerCase().trim() === cleanTarget);
+  if(exact) return exact;
+
+  // 2. Palabras clave distintivas de variantes y licores
+  const variantKeywords = ['pink', 'coco', 'seco', 'gold', 'silver', 'black', 'red', 'blue', 'platino', 'limon', 'sandia', 'maracuya', 'mora', 'energy', 'bongo', 'retornable', 'lata', 'botella', '2000cc', '1000cc', '750ml', '330ml', '269ml', '1l', '2l', 'corona', 'pilsener', 'club', 'stella', 'heineken'];
+
+  const targetWords = cleanTarget.split(/[\s\+\-_]+/).filter(w => w.length > 1);
+
+  let bestProd = null;
+  let bestScore = 0;
+
+  for(const p of productos) {
+    const pName = p.nombre.toLowerCase().trim();
+    const pWords = pName.split(/[\s\+\-_]+/).filter(w => w.length > 1);
+
+    // Si una variante específica está en el objetivo pero no en el producto (o viceversa), NUNCA hacer match
+    let hasConflict = false;
+    for(const kw of variantKeywords) {
+      const inTarget = cleanTarget.includes(kw);
+      const inProd = pName.includes(kw);
+      if(inTarget !== inProd) {
+        hasConflict = true;
+        break;
+      }
+    }
+    if(hasConflict) continue;
+
+    // Calcular solapamiento de palabras
+    let matchCount = 0;
+    for(const tw of targetWords) {
+      if(pWords.includes(tw)) matchCount++;
+    }
+
+    const score = matchCount / Math.max(targetWords.length, pWords.length);
+    if(score > 0.65 && score > bestScore) {
+      bestScore = score;
+      bestProd = p;
+    }
+  }
+
+  return bestProd;
+}
+
 function renderMappingRows() {
   const container = document.getElementById('invoice-items-list');
   const inventariables = (tempFacturaData.items || []).filter(it => !it.es_servicio);
@@ -3516,15 +3579,26 @@ function renderMappingRows() {
 
   container.innerHTML = inventariables.map((item, idx) => {
     const nombreSugerido = item.nombre_limpio || item.nombre_original;
-    const match = productos.find(p => p.nombre.toLowerCase().includes(nombreSugerido.toLowerCase().substring(0, 5)));
-    const cantFacturada = item.cantidad_factura || item.bultos || item.cantidad || 1;
-    const esCaja = Boolean(item.es_caja_o_pack && item.unidades_por_caja && item.unidades_por_caja > 1);
-    const factor = esCaja ? (item.unidades_por_caja || 1) : 1;
-    const puFacturaSinIva = item.precio_unitario_sin_iva || (item.subtotal ? item.subtotal / cantFacturada : (item.precio_bulto_sin_iva || 0));
+    const match = findBestProductMatch(nombreSugerido);
 
-    const totalUnidades = cantFacturada * factor;
-    const costoUnitarioSinIva = factor > 0 ? (puFacturaSinIva / factor) : puFacturaSinIva;
-    const costoUnitarioConIva = costoUnitarioSinIva * 1.15;
+    const subEmpaque = parseInt(item.sub_empaque, 10) || 1;
+    const cajas = parseInt(item.cajas, 10) || 0;
+    const sueltas = (item.unidades_sueltas !== undefined) ? parseInt(item.unidades_sueltas, 10) : (item.unidades_totales || item.cantidad_factura || item.bultos || 1);
+    
+    // Cálculo inicial de unidades reales
+    const totalUnidades = (cajas > 0 || subEmpaque > 1) ? ((cajas * subEmpaque) + sueltas) : sueltas;
+    
+    // Precio unitario por botella / unidad s/IVA
+    let puSinIva = item.precio_unitario_sin_iva;
+    if(!puSinIva || puSinIva <= 0) {
+      if(item.subtotal && totalUnidades > 0) {
+        puSinIva = item.subtotal / totalUnidades;
+      } else {
+        puSinIva = item.precio_bulto_sin_iva || 1;
+      }
+    }
+    const puConIva = puSinIva * 1.15;
+    const subtotalCalculado = item.subtotal || (totalUnidades * puSinIva);
 
     return `
       <div class="invoice-line-card" id="inv-card-${idx}">
@@ -3532,7 +3606,7 @@ function renderMappingRows() {
         <div class="invoice-line-header">
           <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
             <span class="badge-item-num">Ítem #${idx + 1}</span>
-            <span style="font-weight:600; font-size:13.5px; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(nombreSugerido)}">
+            <span style="font-weight:700; font-size:13.5px; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(nombreSugerido)}">
               ${escapeHtml(nombreSugerido)}
             </span>
           </div>
@@ -3547,33 +3621,41 @@ function renderMappingRows() {
         <div id="inv-details-section-${idx}">
           <!-- Nombre Limpio -->
           <div class="field" style="margin-bottom:8px;">
-            <label>Nombre del Producto en Catálogo</label>
+            <label>Nombre del Producto en Catálogo (incluye sabor / tamaño)</label>
             <input type="text" id="map-clean-name-${idx}" value="${escapeHtml(nombreSugerido)}" style="margin-bottom:0; font-weight:600;">
           </div>
 
-          <!-- Selector de Modo de Empaque -->
-          <div style="display:flex; gap:6px; margin-bottom:8px;">
-            <button type="button" class="btn ${!esCaja ? 'btn-primary' : 'btn-ghost'}" id="btn-mode-unit-${idx}" onclick="setLinePackMode(${idx}, 'unit')" style="flex:1; padding:6px 10px; font-size:11.5px;">
-              🔹 Unidades Directas (x1)
-            </button>
-            <button type="button" class="btn ${esCaja ? 'btn-primary' : 'btn-ghost'}" id="btn-mode-pack-${idx}" onclick="setLinePackMode(${idx}, 'pack')" style="flex:1; padding:6px 10px; font-size:11.5px;">
-              📦 Caja / Pack (Multiplicar)
-            </button>
+          <!-- Desglose de Cantidades estilo Distribuidoras (Azende, Dinadec, CN) -->
+          <div style="background:#0c121c; border:1px solid #1f2e44; border-radius:8px; padding:8px 10px; margin-bottom:8px;">
+            <div style="font-size:11px; text-transform:uppercase; color:var(--blue-bright); font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between;">
+              <span>📦 Cantidades según Factura (SUB / CAJA / UNIDAD)</span>
+              <span style="color:var(--cream-dim); font-family:var(--font-mono);">(Cajas × SUB) + Sueltas</span>
+            </div>
+            <div class="field-row" style="margin-bottom:0; gap:6px;">
+              <div class="field" style="margin-bottom:0; flex:1;">
+                <label style="font-size:11px;">Cajas (Enteras)</label>
+                <input type="number" id="map-cajas-${idx}" value="${cajas}" min="0" oninput="recalcDistributorLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700; text-align:center;">
+              </div>
+              <div class="field" style="margin-bottom:0; flex:1;">
+                <label style="font-size:11px;">SUB (Uds/Caja)</label>
+                <input type="number" id="map-sub-${idx}" value="${subEmpaque}" min="1" oninput="recalcDistributorLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700; text-align:center;">
+              </div>
+              <div class="field" style="margin-bottom:0; flex:1;">
+                <label style="font-size:11px;">Uds. Sueltas</label>
+                <input type="number" id="map-sueltas-${idx}" value="${sueltas}" min="0" oninput="recalcDistributorLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700; text-align:center;">
+              </div>
+            </div>
           </div>
 
-          <!-- Campos de Entrada -->
+          <!-- Precio Unitario por Botella / Unidad -->
           <div class="field-row" style="margin-bottom:8px; gap:8px;">
-            <div class="field" style="margin-bottom:0; flex:1;">
-              <label id="lbl-bultos-${idx}">${esCaja ? 'N° Cajas / Packs' : 'Cantidad Facturada'}</label>
-              <input type="number" id="map-bultos-${idx}" value="${cantFacturada}" min="1" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700;">
-            </div>
-            <div class="field ${!esCaja ? 'hidden' : ''}" id="field-factor-${idx}" style="margin-bottom:0; flex:1;">
-              <label>Unidades x Caja</label>
-              <input type="number" id="map-factor-${idx}" value="${factor}" min="1" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700;">
-            </div>
             <div class="field" style="margin-bottom:0; flex:1.2;">
-              <label id="lbl-precio-${idx}">${esCaja ? 'Precio Caja s/IVA' : 'Precio Unitario s/IVA'}</label>
-              <input type="number" step="0.01" id="map-precio-bulto-${idx}" value="${puFacturaSinIva.toFixed(2)}" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700;">
+              <label>Precio Unitario s/IVA (por botella)</label>
+              <input type="number" step="0.0001" id="map-pu-${idx}" value="${puSinIva.toFixed(4)}" oninput="recalcDistributorLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700;">
+            </div>
+            <div class="field" style="margin-bottom:0; flex:1;">
+              <label>Subtotal Línea s/IVA</label>
+              <input type="number" step="0.01" id="map-subtotal-${idx}" value="${subtotalCalculado.toFixed(2)}" readonly style="margin-bottom:0; font-family:var(--font-mono); font-weight:700; background:#0e1624; color:var(--cream-dim);">
             </div>
           </div>
 
@@ -3585,7 +3667,7 @@ function renderMappingRows() {
             </div>
             <div style="text-align:right;">
               <span style="font-size:11px; text-transform:uppercase; color:var(--cream-faint); display:block; font-weight:600;">Costo Unitario c/IVA</span>
-              <b id="map-unit-cost-badge-${idx}" style="color:var(--amber-bright); font-size:15px; font-family:var(--font-mono);">${money(costoUnitarioConIva)}</b>
+              <b id="map-unit-cost-badge-${idx}" style="color:var(--amber-bright); font-size:15px; font-family:var(--font-mono);">${money(puConIva)}</b>
             </div>
           </div>
 
@@ -3618,31 +3700,24 @@ function renderMappingRows() {
   }).join('');
 }
 
-window.setLinePackMode = function(idx, mode) {
-  const isUnit = mode === 'unit';
-  const factorField = document.getElementById(`field-factor-${idx}`);
-  const factorInput = document.getElementById(`map-factor-${idx}`);
-  const btnUnit = document.getElementById(`btn-mode-unit-${idx}`);
-  const btnPack = document.getElementById(`btn-mode-pack-${idx}`);
-  const lblBultos = document.getElementById(`lbl-bultos-${idx}`);
-  const lblPrecio = document.getElementById(`lbl-precio-${idx}`);
+window.recalcDistributorLineTotals = function(idx) {
+  const cajas = parseInt(document.getElementById(`map-cajas-${idx}`)?.value, 10) || 0;
+  const subEmpaque = parseInt(document.getElementById(`map-sub-${idx}`)?.value, 10) || 1;
+  const sueltas = parseInt(document.getElementById(`map-sueltas-${idx}`)?.value, 10) || 0;
+  const puSinIva = parseFloat(document.getElementById(`map-pu-${idx}`)?.value) || 0;
 
-  if(isUnit) {
-    factorField?.classList.add('hidden');
-    if(factorInput) factorInput.value = 1;
-    if(btnUnit) btnUnit.className = 'btn btn-primary';
-    if(btnPack) btnPack.className = 'btn btn-ghost';
-    if(lblBultos) lblBultos.textContent = 'Cantidad Facturada';
-    if(lblPrecio) lblPrecio.textContent = 'Precio Unitario s/IVA';
-  } else {
-    factorField?.classList.remove('hidden');
-    if(factorInput && parseInt(factorInput.value, 10) <= 1) factorInput.value = 24;
-    if(btnUnit) btnUnit.className = 'btn btn-ghost';
-    if(btnPack) btnPack.className = 'btn btn-primary';
-    if(lblBultos) lblBultos.textContent = 'N° Cajas / Packs';
-    if(lblPrecio) lblPrecio.textContent = 'Precio por Caja s/IVA';
-  }
-  recalcInvoiceLineTotals(idx);
+  const totalUnidades = (cajas * subEmpaque) + sueltas;
+  const puConIva = puSinIva * 1.15;
+  const subtotalLinea = totalUnidades * puSinIva;
+
+  const subtotalInput = document.getElementById(`map-subtotal-${idx}`);
+  if(subtotalInput) subtotalInput.value = subtotalLinea.toFixed(2);
+
+  const unitsBadge = document.getElementById(`map-total-units-badge-${idx}`);
+  if(unitsBadge) unitsBadge.textContent = `+${totalUnidades} unidades`;
+
+  const costBadge = document.getElementById(`map-unit-cost-badge-${idx}`);
+  if(costBadge) costBadge.textContent = money(puConIva);
 };
 
 window.toggleInventariarItem = function(idx) {
@@ -3661,20 +3736,6 @@ window.toggleInventariarItem = function(idx) {
     label.style.color = isChecked ? 'var(--good-bright)' : 'var(--purple-bright)';
     label.style.borderColor = isChecked ? 'rgba(34, 197, 94, 0.35)' : 'rgba(139, 92, 246, 0.35)';
   }
-};
-
-window.recalcInvoiceLineTotals = function(idx) {
-  const bultos = parseInt(document.getElementById(`map-bultos-${idx}`).value, 10) || 0;
-  const factorInput = document.getElementById(`map-factor-${idx}`);
-  const factor = factorInput ? (parseInt(factorInput.value, 10) || 1) : 1;
-  const precioBulto = parseFloat(document.getElementById(`map-precio-bulto-${idx}`).value) || 0;
-
-  const totalUnidades = bultos * factor;
-  const costoUnitarioSinIva = factor > 0 ? (precioBulto / factor) : 0;
-  const costoUnitarioConIva = costoUnitarioSinIva * 1.15;
-
-  document.getElementById(`map-total-units-badge-${idx}`).textContent = `+${totalUnidades} unidades`;
-  document.getElementById(`map-unit-cost-badge-${idx}`).textContent = money(costoUnitarioConIva);
 };
 
 document.getElementById('btn-save-invoice')?.addEventListener('click', async () => {
@@ -3723,16 +3784,17 @@ document.getElementById('btn-save-invoice')?.addEventListener('click', async () 
     for(let idx = 0; idx < inventariables.length; idx++){
       const esInventariable = document.getElementById(`map-inventariar-${idx}`).checked;
       const cleanName = document.getElementById(`map-clean-name-${idx}`).value.trim();
-      const bultos = parseInt(document.getElementById(`map-bultos-${idx}`).value, 10) || 1;
-      const factor = parseInt(document.getElementById(`map-factor-${idx}`).value, 10) || 1;
-      const precioBulto = parseFloat(document.getElementById(`map-precio-bulto-${idx}`).value) || 0;
+      
+      const cajas = parseInt(document.getElementById(`map-cajas-${idx}`)?.value, 10) || 0;
+      const subEmpaque = parseInt(document.getElementById(`map-sub-${idx}`)?.value, 10) || 1;
+      const sueltas = parseInt(document.getElementById(`map-sueltas-${idx}`)?.value, 10) || 0;
+      const puSinIva = parseFloat(document.getElementById(`map-pu-${idx}`)?.value) || 0;
       const selectedVal = document.getElementById(`map-prod-${idx}`).value;
       const fechaCaducidad = document.getElementById(`map-caducidad-${idx}`).value || null;
 
-      const totalUnidades = bultos * factor;
-      const puSinIva = factor > 0 ? (precioBulto / factor) : precioBulto;
+      const totalUnidades = (cajas * subEmpaque) + sueltas;
       const puConIva = puSinIva * 1.15;
-      const subtotalLinea = precioBulto * bultos;
+      const subtotalLinea = totalUnidades * puSinIva;
 
       let prodId = null;
       let presId = null;
