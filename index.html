@@ -3798,6 +3798,7 @@ document.getElementById('btn-save-invoice')?.addEventListener('click', async () 
 
       let prodId = null;
       let presId = null;
+      let initialStockBefore = 0;
 
       if(esInventariable) {
         if(selectedVal === '__auto_create__'){
@@ -3807,7 +3808,7 @@ document.getElementById('btn-save-invoice')?.addEventListener('click', async () 
             unidad_base: 'unidad',
             precio_sin_iva: puSinIva,
             iva_porcentaje: 15.00,
-            stock_actual: totalUnidades,
+            stock_actual: 0,
             stock_minimo: 5,
             activo: true,
             fecha_caducidad: fechaCaducidad
@@ -3815,6 +3816,7 @@ document.getElementById('btn-save-invoice')?.addEventListener('click', async () 
 
           if(newProd){
             prodId = newProd.id;
+            initialStockBefore = 0;
             const { data: newPres } = await sb.from('presentaciones_producto').insert({
               producto_id: newProd.id,
               nombre: 'Unidad',
@@ -3830,10 +3832,9 @@ document.getElementById('btn-save-invoice')?.addEventListener('click', async () 
             prodId = prod.id;
             presId = (prod.presentaciones_producto && prod.presentaciones_producto[0]) ? prod.presentaciones_producto[0].id : null;
             const { data: pFresh } = await sb.from('productos').select('stock_actual').eq('id', prod.id).single();
-            const currentStock = pFresh ? (pFresh.stock_actual || 0) : (prod.stock_actual || 0);
+            initialStockBefore = pFresh ? (pFresh.stock_actual || 0) : (prod.stock_actual || 0);
             await sb.from('productos').update({
               precio_sin_iva: puSinIva,
-              stock_actual: currentStock + totalUnidades,
               fecha_caducidad: fechaCaducidad || prod.fecha_caducidad
             }).eq('id', prod.id);
           }
@@ -3849,12 +3850,31 @@ document.getElementById('btn-save-invoice')?.addEventListener('click', async () 
         subtotal: subtotalLinea,
         producto_id: prodId,
         presentacion_id: presId,
-        fecha_caducidad: esInventariable ? fechaCaducidad : null
+        fecha_caducidad: esInventariable ? fechaCaducidad : null,
+        _initialStockBefore: initialStockBefore,
+        _esInventariable: esInventariable
       });
     }
 
     if(detalles.length > 0) {
-      await sb.from('detalle_factura_compra').insert(detalles);
+      const insertRows = detalles.map(d => {
+        const row = { ...d };
+        delete row._initialStockBefore;
+        delete row._esInventariable;
+        return row;
+      });
+      await sb.from('detalle_factura_compra').insert(insertRows);
+
+      // Verificación y sincronización exacta de stock para evitar dobles sumas por triggers de base de datos
+      for(const d of detalles) {
+        if(d._esInventariable && d.producto_id && d.cantidad > 0) {
+          const targetStock = d._initialStockBefore + d.cantidad;
+          const { data: pAfter } = await sb.from('productos').select('stock_actual').eq('id', d.producto_id).single();
+          if(pAfter && pAfter.stock_actual !== targetStock) {
+            await sb.from('productos').update({ stock_actual: targetStock }).eq('id', d.producto_id);
+          }
+        }
+      }
     }
 
     showToast('Factura guardada e inventario actualizado ✓');
