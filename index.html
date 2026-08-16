@@ -703,7 +703,8 @@
     <div id="view-inventario" class="screen">
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px; flex-wrap:wrap; gap:6px;">
         <h1 class="page-title" style="margin:0;">Inventario</h1>
-        <div style="display:flex; gap:6px;">
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <button class="btn btn-ghost" id="btn-open-reconciliar" style="padding:6px 10px; font-size:12px;">⚖️ Conciliar Stock</button>
           <button class="btn btn-ghost" id="btn-open-categorias" style="padding:6px 10px; font-size:12px;">📁 Categorías</button>
           <button class="btn btn-ghost" id="btn-open-subcategorias" style="padding:6px 10px; font-size:12px;">🏷 Subcategorías</button>
         </div>
@@ -1322,6 +1323,33 @@
       <img id="zoom-img-target" src="" alt="Factura">
     </div>
     <button class="btn btn-ghost btn-block" onclick="document.getElementById('modal-image-zoom').classList.add('hidden')">Cerrar</button>
+  </div>
+</div>
+
+<!-- Modal: Conciliación & Auditoría de Stock -->
+<div class="modal-backdrop hidden" id="modal-reconciliar-stock">
+  <div class="modal-sheet" style="max-width: 720px;">
+    <button class="modal-close" onclick="document.getElementById('modal-reconciliar-stock').classList.add('hidden')">×</button>
+    <h2>⚖️ Conciliación &amp; Auditoría de Stock</h2>
+    <div class="modal-sub">
+      Audita y sincroniza las cantidades de inventario frente a las <b>facturas de compra activas</b> y <b>ventas registradas</b>.
+      Si eliminaste facturas anteriormente, puedes ajustar el stock exacto aquí con 1 clic.
+    </div>
+
+    <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
+      <input type="text" id="reconcile-search-input" placeholder="Filtrar producto en auditoría…" style="flex:1; margin-bottom:0;" oninput="renderReconciliationList()">
+      <button type="button" class="btn btn-ghost" onclick="autoFillCalculatedStockAll()" style="font-size:12px; padding:8px 12px;">
+        ⚡ Usar Todo Calculado (Compras - Ventas)
+      </button>
+    </div>
+
+    <div class="card" id="reconciliation-list-container" style="max-height: 400px; overflow-y: auto; margin-bottom: 16px; padding: 10px;">
+      <div class="empty">Calculando auditoría de inventario…</div>
+    </div>
+
+    <button type="button" class="btn btn-primary btn-block" id="btn-save-reconciliation">
+      💾 Guardar Todos los Ajustes de Stock en Supabase
+    </button>
   </div>
 </div>
 
@@ -2585,7 +2613,33 @@ document.getElementById('btn-process-sale').addEventListener('click', async () =
     const { error: dErr } = await sb.from('detalle_venta').insert(detalles);
     if(dErr) throw dErr;
 
-    showToast('Venta cobrada con éxito ✓');
+    // Descontar stock en Supabase para productos y combos vendidos
+    for(const item of carrito) {
+      if(item.tipo === 'producto') {
+        const prod = productos.find(p => p.id === item.productoId);
+        const pres = (prod?.presentaciones_producto || []).find(pr => pr.id == item.presentacionId);
+        const factor = pres ? pres.cantidad_unidad_base : 1;
+        const totalUnitsToDeduct = item.cantidad * factor;
+
+        const { data: pData } = await sb.from('productos').select('stock_actual').eq('id', item.productoId).single();
+        if(pData) {
+          const newStock = Math.max(0, (pData.stock_actual || 0) - totalUnitsToDeduct);
+          await sb.from('productos').update({ stock_actual: newStock }).eq('id', item.productoId);
+        }
+      } else if(item.tipo === 'combo') {
+        const cmb = combos.find(c => c.id === item.comboId);
+        for(const ci of (cmb?.combo_items || [])) {
+          const totalUnitsToDeduct = (ci.cantidad_unidad_base || 1) * item.cantidad;
+          const { data: pData } = await sb.from('productos').select('stock_actual').eq('id', ci.producto_id).single();
+          if(pData) {
+            const newStock = Math.max(0, (pData.stock_actual || 0) - totalUnitsToDeduct);
+            await sb.from('productos').update({ stock_actual: newStock }).eq('id', ci.producto_id);
+          }
+        }
+      }
+    }
+
+    showToast('Venta cobrada y stock descontado con éxito ✓');
     carrito = []; updateCartUI();
     document.getElementById('modal-checkout').classList.add('hidden');
     await loadProductos();
@@ -2595,7 +2649,7 @@ document.getElementById('btn-process-sale').addEventListener('click', async () =
 });
 
 // =====================================================================
-// HISTORIAL DE VENTAS & ELIMINACIÓN
+// HISTORIAL DE VENTAS & ELIMINACIÓN (CON RESTITUCIÓN DE STOCK)
 // =====================================================================
 async function renderHistorialVentas() {
   const list = document.getElementById('historial-ventas-list');
@@ -2662,20 +2716,48 @@ document.getElementById('btn-eliminar-venta').addEventListener('click', async ()
   if(!currentVentaDetalleId || !confirm('¿Estás seguro de anular esta venta? El stock de los productos y componentes de combos se devolverá automáticamente.')) return;
   const btn = document.getElementById('btn-eliminar-venta');
   btn.disabled = true;
+  btn.textContent = 'Restituyendo stock y anulando...';
 
   try {
-    const { error } = await sb.from('ventas').delete().eq('id', currentVentaDetalleId);
-    if(error) throw error;
+    // 1. Obtener líneas de venta con sus presentaciones y componentes de combo
+    const { data: lineas, error: lErr } = await sb.from('detalle_venta').select('*, presentaciones_producto(cantidad_unidad_base), combos(id, combo_items(producto_id, cantidad_unidad_base))').eq('venta_id', currentVentaDetalleId);
+    if(lErr) throw lErr;
 
-    showToast('Venta eliminada y stock restituido ✓');
+    // 2. Restituir el stock en Supabase
+    for(const l of (lineas || [])) {
+      if(l.producto_id) {
+        const factor = l.presentaciones_producto?.cantidad_unidad_base || 1;
+        const totalUnitsToRestore = l.cantidad * factor;
+        const { data: pData } = await sb.from('productos').select('stock_actual').eq('id', l.producto_id).single();
+        if(pData) {
+          await sb.from('productos').update({ stock_actual: (pData.stock_actual || 0) + totalUnitsToRestore }).eq('id', l.producto_id);
+        }
+      } else if(l.combo_id && l.combos?.combo_items) {
+        for(const ci of l.combos.combo_items) {
+          const totalUnitsToRestore = (ci.cantidad_unidad_base || 1) * l.cantidad;
+          const { data: pData } = await sb.from('productos').select('stock_actual').eq('id', ci.producto_id).single();
+          if(pData) {
+            await sb.from('productos').update({ stock_actual: (pData.stock_actual || 0) + totalUnitsToRestore }).eq('id', ci.producto_id);
+          }
+        }
+      }
+    }
+
+    // 3. Eliminar detalle y venta
+    await sb.from('detalle_venta').delete().eq('venta_id', currentVentaDetalleId);
+    const { error: vErr } = await sb.from('ventas').delete().eq('id', currentVentaDetalleId);
+    if(vErr) throw vErr;
+
+    showToast('Venta anulada y stock restituido ✓');
     document.getElementById('modal-detalle-venta').classList.add('hidden');
     await renderHistorialVentas();
     await loadProductos();
     await loadCombos();
   } catch(err) {
-    showToast('Error al eliminar venta: ' + err.message, true);
+    showToast('Error al anular venta: ' + err.message, true);
   }
   btn.disabled = false;
+  btn.textContent = '🗑 Eliminar Venta y Devolver Stock';
 });
 
 // =====================================================================
@@ -3091,13 +3173,48 @@ document.getElementById('btn-det-export-folder')?.addEventListener('click', asyn
 });
 
 document.getElementById('btn-eliminar-factura')?.addEventListener('click', async () => {
-  if(!currentFacturaDetalleId || !confirm('¿Eliminar esta factura? El stock ingresado se revertirá automáticamente.')) return;
+  if(!currentFacturaDetalleId || !confirm('¿Eliminar esta factura? El stock de todos los productos ingresados en esta factura se descontará y revertirá automáticamente del inventario.')) return;
+  const btn = document.getElementById('btn-eliminar-factura');
+  btn.disabled = true;
+  btn.textContent = 'Revirtiendo stock y eliminando factura...';
+
   try {
-    await sb.from('facturas_compra').delete().eq('id', currentFacturaDetalleId);
-    showToast('Factura eliminada y stock revertido ✓');
+    // 1. Obtener todas las líneas de la factura a eliminar
+    const { data: lineas, error: lErr } = await sb.from('detalle_factura_compra').select('*').eq('factura_id', currentFacturaDetalleId);
+    if(lErr) throw lErr;
+
+    // 2. Revertir y descontar el stock de cada producto en Supabase
+    if(lineas && lineas.length > 0) {
+      for(const l of lineas) {
+        if(l.producto_id && l.cantidad > 0) {
+          const { data: prodData } = await sb.from('productos').select('id, stock_actual').eq('id', l.producto_id).single();
+          if(prodData) {
+            const currentStock = prodData.stock_actual || 0;
+            const newStock = Math.max(0, currentStock - l.cantidad);
+            await sb.from('productos').update({ stock_actual: newStock }).eq('id', l.producto_id);
+          }
+        }
+      }
+    }
+
+    // 3. Eliminar imágenes y líneas asociadas en Supabase
+    await sb.from('imagenes_factura').delete().eq('factura_id', currentFacturaDetalleId);
+    await sb.from('detalle_factura_compra').delete().eq('factura_id', currentFacturaDetalleId);
+
+    // 4. Eliminar la factura
+    const { error: fErr } = await sb.from('facturas_compra').delete().eq('id', currentFacturaDetalleId);
+    if(fErr) throw fErr;
+
+    showToast('Factura eliminada y stock revertido exitosamente ✓');
     document.getElementById('modal-detalle-factura').classList.add('hidden');
-    await loadFacturas(); await loadProductos();
-  } catch(e) { showToast('Error: ' + e.message, true); }
+    await loadFacturas();
+    await loadProductos();
+    await loadCombos();
+  } catch(e) {
+    showToast('Error al revertir y eliminar factura: ' + e.message, true);
+  }
+  btn.disabled = false;
+  btn.textContent = '🗑 Eliminar Factura y Revertir Stock';
 });
 
 // =====================================================================
@@ -3400,9 +3517,11 @@ document.getElementById('btn-save-invoice')?.addEventListener('click', async () 
           if(prod){
             prodId = prod.id;
             presId = (prod.presentaciones_producto && prod.presentaciones_producto[0]) ? prod.presentaciones_producto[0].id : null;
+            const { data: pFresh } = await sb.from('productos').select('stock_actual').eq('id', prod.id).single();
+            const currentStock = pFresh ? (pFresh.stock_actual || 0) : (prod.stock_actual || 0);
             await sb.from('productos').update({
               precio_sin_iva: puSinIva,
-              stock_actual: (prod.stock_actual || 0) + totalUnidades,
+              stock_actual: currentStock + totalUnidades,
               fecha_caducidad: fechaCaducidad || prod.fecha_caducidad
             }).eq('id', prod.id);
           }
@@ -3806,6 +3925,160 @@ async function exportFacturasOrganizadas(facturaIds, mode = 'zip') {
     }, 1500);
   }
 }
+
+// =====================================================================
+// HERRAMIENTA DE CONCILIACIÓN & AUDITORÍA DE STOCK
+// =====================================================================
+let reconciliationData = [];
+
+document.getElementById('btn-open-reconciliar')?.addEventListener('click', async () => {
+  document.getElementById('modal-reconciliar-stock').classList.remove('hidden');
+  await loadStockReconciliation();
+});
+
+async function loadStockReconciliation() {
+  const container = document.getElementById('reconciliation-list-container');
+  container.innerHTML = '<div class="empty">Calculando auditoría de compras vs ventas…</div>';
+
+  try {
+    // 1. Obtener todas las líneas de facturas activas
+    const { data: facLineas } = await sb.from('detalle_factura_compra').select('producto_id, cantidad');
+    
+    // 2. Obtener todas las líneas de ventas activas con multiplicadores
+    const { data: vtaLineas } = await sb.from('detalle_venta').select('producto_id, combo_id, cantidad, presentaciones_producto(cantidad_unidad_base), combos(id, combo_items(producto_id, cantidad_unidad_base))');
+
+    // Mapear compras
+    const comprasMap = {};
+    (facLineas || []).forEach(l => {
+      if(l.producto_id) {
+        comprasMap[l.producto_id] = (comprasMap[l.producto_id] || 0) + Number(l.cantidad || 0);
+      }
+    });
+
+    // Mapear ventas
+    const ventasMap = {};
+    (vtaLineas || []).forEach(l => {
+      if(l.producto_id) {
+        const factor = l.presentaciones_producto?.cantidad_unidad_base || 1;
+        ventasMap[l.producto_id] = (ventasMap[l.producto_id] || 0) + (Number(l.cantidad || 0) * factor);
+      } else if(l.combo_id && l.combos?.combo_items) {
+        l.combos.combo_items.forEach(ci => {
+          const factor = ci.cantidad_unidad_base || 1;
+          ventasMap[ci.producto_id] = (ventasMap[ci.producto_id] || 0) + (Number(l.cantidad || 0) * factor);
+        });
+      }
+    });
+
+    reconciliationData = productos.map(p => {
+      const compradas = comprasMap[p.id] || 0;
+      const vendidas = ventasMap[p.id] || 0;
+      const calculado = Math.max(0, compradas - vendidas);
+      return {
+        id: p.id,
+        nombre: p.nombre,
+        categoria: p.categorias?.nombre || 'Sin categoría',
+        unidad_base: p.unidad_base || 'unidad',
+        stock_actual: p.stock_actual || 0,
+        compradas,
+        vendidas,
+        calculado
+      };
+    });
+
+    renderReconciliationList();
+  } catch(err) {
+    console.error('Error calculando reconciliación:', err);
+    container.innerHTML = `<div class="empty">Error al calcular auditoría: ${err.message}</div>`;
+  }
+}
+
+function renderReconciliationList() {
+  const container = document.getElementById('reconciliation-list-container');
+  const q = (document.getElementById('reconcile-search-input')?.value || '').toLowerCase().trim();
+
+  const filtered = reconciliationData.filter(r => {
+    return !q || r.nombre.toLowerCase().includes(q) || r.categoria.toLowerCase().includes(q);
+  });
+
+  if(!filtered.length) {
+    container.innerHTML = '<div class="empty">No hay productos que coincidan con la búsqueda.</div>';
+    return;
+  }
+
+  container.innerHTML = filtered.map(r => {
+    const diff = r.stock_actual - r.calculado;
+    const isDesfasado = diff !== 0;
+
+    return `
+      <div style="background:var(--wood-900); border:1px solid var(--cork-line); border-radius:8px; padding:10px 12px; margin-bottom:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; flex-wrap:wrap; gap:4px;">
+          <div>
+            <b style="font-size:13.5px; color:var(--cream);">${escapeHtml(r.nombre)}</b>
+            <div style="font-size:11.5px; color:var(--cream-faint);">🏷 ${escapeHtml(r.categoria)}</div>
+          </div>
+          ${isDesfasado ? `<span class="badge badge-warn" style="font-size:10px;">Desfase: ${diff > 0 ? '+'+diff : diff}</span>` : `<span class="badge badge-ok" style="font-size:10px;">✓ Cuadrado</span>`}
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px; background:var(--wood-950); padding:6px 10px; border-radius:6px; font-size:11.5px; margin-bottom:8px;">
+          <div>Facturas Compradas:<br><b style="color:var(--good);">+${r.compradas} ${r.unidad_base}</b></div>
+          <div>Total Vendido:<br><b style="color:var(--bad);">-${r.vendidas} ${r.unidad_base}</b></div>
+          <div>Calculado (Compras - Ventas):<br><b style="color:var(--amber-bright);">${r.calculado} ${r.unidad_base}</b></div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:8px; justify-content:flex-end;">
+          <label style="margin:0; font-size:12px; color:var(--cream-dim);">Stock Real / Final:</label>
+          <input type="number" id="reconcile-input-${r.id}" min="0" value="${r.stock_actual}" style="width:85px; margin-bottom:0; text-align:center; font-weight:700; font-family:var(--font-mono);">
+          <button type="button" class="btn btn-ghost" onclick="setReconcileInputVal(${r.id}, ${r.calculado})" style="padding:6px 10px; font-size:11.5px;">
+            ⚡ Usar ${r.calculado}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+window.setReconcileInputVal = function(id, val) {
+  const input = document.getElementById(`reconcile-input-${id}`);
+  if(input) input.value = val;
+};
+
+window.autoFillCalculatedStockAll = function() {
+  reconciliationData.forEach(r => {
+    const input = document.getElementById(`reconcile-input-${r.id}`);
+    if(input) input.value = r.calculado;
+  });
+  showToast('Valores calculados asignados a todos los productos. Presiona Guardar para confirmar.');
+};
+
+document.getElementById('btn-save-reconciliation')?.addEventListener('click', async () => {
+  const btn = document.getElementById('btn-save-reconciliation');
+  btn.disabled = true;
+  btn.textContent = 'Actualizando stock en Supabase...';
+
+  try {
+    let updatedCount = 0;
+    for(const r of reconciliationData) {
+      const input = document.getElementById(`reconcile-input-${r.id}`);
+      if(input) {
+        const newVal = parseInt(input.value, 10);
+        if(!isNaN(newVal) && newVal !== r.stock_actual) {
+          const { error } = await sb.from('productos').update({ stock_actual: Math.max(0, newVal) }).eq('id', r.id);
+          if(error) throw error;
+          updatedCount++;
+        }
+      }
+    }
+
+    showToast(`¡Stock reconciliado y actualizado en Supabase! (${updatedCount} productos actualizados) ✓`);
+    document.getElementById('modal-reconciliar-stock').classList.add('hidden');
+    await loadProductos();
+    await loadCombos();
+  } catch(e) {
+    showToast('Error guardando reconciliación: ' + e.message, true);
+  }
+  btn.disabled = false;
+  btn.textContent = '💾 Guardar Todos los Ajustes de Stock en Supabase';
+});
 </script>
 </body>
 </html>
