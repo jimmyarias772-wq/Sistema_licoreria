@@ -12,20 +12,42 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root {
-    --wood-950: #1a120d;
-    --wood-900: #241811;
-    --wood-800: #322119;
-    --wood-700: #43301f;
-    --cork-line: #4d3a26;
-    --cream: #f2e9dc;
-    --cream-dim: #c9baa4;
-    --cream-faint: #8f7f6c;
-    --amber: #d19a3d;
-    --amber-bright: #e8b45a;
-    --wine: #8a2f3d;
-    --wine-bright: #b5455a;
-    --good: #6f9a5c;
-    --bad: #c1502e;
+    --wood-950: #0c1017;
+    --wood-900: #131924;
+    --wood-850: #1a2230;
+    --wood-800: #202b3d;
+    --wood-700: #2c3a52;
+    --cork-line: #27354a;
+    
+    --cream: #f8fafc;
+    --cream-dim: #cbd5e1;
+    --cream-faint: #94a3b8;
+    
+    --amber: #f59e0b;
+    --amber-bright: #fbbf24;
+    --amber-bg: rgba(245, 158, 11, 0.12);
+    --amber-border: rgba(245, 158, 11, 0.35);
+    
+    --blue-accent: #3b82f6;
+    --blue-bright: #60a5fa;
+    --blue-bg: rgba(59, 130, 246, 0.12);
+    --blue-border: rgba(59, 130, 246, 0.35);
+    
+    --purple-accent: #8b5cf6;
+    --purple-bright: #a78bfa;
+    --purple-bg: rgba(139, 92, 246, 0.12);
+    --purple-border: rgba(139, 92, 246, 0.35);
+    
+    --good: #22c55e;
+    --good-bright: #4ade80;
+    --good-bg: rgba(34, 197, 94, 0.14);
+    --good-border: rgba(34, 197, 94, 0.35);
+    
+    --bad: #ef4444;
+    --bad-bright: #f87171;
+    --bad-bg: rgba(239, 68, 68, 0.14);
+    --bad-border: rgba(239, 68, 68, 0.35);
+    
     --radius: 10px;
     --font-display: 'Fraunces', serif;
     --font-body: 'Work Sans', sans-serif;
@@ -188,23 +210,55 @@
   }
   @media (max-width: 720px) { .fab { right: 18px; } }
 
+  /* Contenedores Temáticos de Alto Contraste */
+  .card-supplier {
+    background: #0e1626;
+    border: 1px solid #1e3352;
+    border-left: 4px solid #3b82f6;
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .card-financial {
+    background: #1c150a;
+    border: 1px solid #4a3412;
+    border-left: 4px solid #f59e0b;
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .card-dates {
+    background: #141322;
+    border: 1px solid #2d284d;
+    border-left: 4px solid #8b5cf6;
+    border-radius: var(--radius);
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+
   input, select, textarea {
     width: 100%;
-    background: var(--wood-800);
-    border: 1px solid var(--cork-line);
-    color: var(--cream);
+    background: #0d121c;
+    border: 1px solid #28364d;
+    color: #f8fafc;
     font-family: var(--font-body);
-    font-size: 14.5px;
+    font-size: 14px;
     padding: 10px 12px;
     border-radius: 8px;
     margin-bottom: 12px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
   }
-  input:focus, select:focus { outline: none; border-color: var(--amber); }
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+    background: #121824;
+  }
   label {
     font-size: 11.5px;
-    color: var(--cream-dim);
+    color: #cbd5e1;
     font-weight: 600;
-    letter-spacing: 0.02em;
+    letter-spacing: 0.03em;
     display: block;
     margin-bottom: 5px;
   }
@@ -217,14 +271,14 @@
     font-size: 11px;
     font-weight: 700;
     padding: 3px 8px;
-    border-radius: 20px;
+    border-radius: 6px;
     font-family: var(--font-mono);
     letter-spacing: 0.02em;
   }
-  .badge-ok { background: rgba(111,154,92,0.18); color: var(--good); }
-  .badge-low { background: rgba(193,80,46,0.18); color: var(--bad); }
-  .badge-warn { background: rgba(209,154,61,0.22); color: var(--amber-bright); }
-  .badge-combo { background: rgba(138,47,61,0.3); color: var(--wine-bright); }
+  .badge-ok { background: rgba(34, 197, 94, 0.15); color: #4ade80; border: 1px solid rgba(34, 197, 94, 0.3); }
+  .badge-low { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
+  .badge-warn { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
+  .badge-combo { background: rgba(139, 92, 246, 0.18); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.35); }
 
   .empty { text-align: center; padding: 45px 20px; color: var(--cream-faint); }
   .empty .ico { font-size: 32px; margin-bottom: 8px; display: block; }
@@ -538,22 +592,78 @@
   }
 
   .invoice-line-card {
-    background: var(--wood-800);
-    border: 1px solid var(--cork-line);
-    border-radius: 8px;
-    padding: 12px;
-    margin-bottom: 12px;
-    transition: opacity 0.2s ease, border-color 0.2s ease;
+    background: #131924;
+    border: 1px solid #24344d;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 14px;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+    transition: opacity 0.2s ease, border-color 0.2s ease, background 0.2s ease;
   }
   .invoice-line-card.dimmed {
     opacity: 0.65;
     border-style: dashed;
+    border-color: #592938;
+    background: #191218;
+  }
+  .invoice-line-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #0d131e;
+    border: 1px solid #1e2c42;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .badge-item-num {
+    background: rgba(59, 130, 246, 0.2);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.4);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+  }
+  .badge-toggle-inv {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #4ade80;
+    background: rgba(34, 197, 94, 0.12);
+    border: 1px solid rgba(34, 197, 94, 0.35);
+    padding: 3px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  .invoice-line-calc-box {
+    background: #0c2014;
+    border: 1px solid #1a4d2c;
+    border-radius: 8px;
+    padding: 10px 14px;
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .invoice-personal-box {
+    background: #23121b;
+    border: 1px dashed #6b2339;
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #fca5a5;
+    font-size: 12px;
   }
 
   /* Facturas & Fotos Styling */
   .invoice-photo-card {
-    background: var(--wood-950);
-    border: 1px solid var(--cork-line);
+    background: #0b0f17;
+    border: 1px solid #202b3d;
     border-radius: var(--radius);
     padding: 12px;
     margin-bottom: 16px;
@@ -565,13 +675,13 @@
     width: 100%;
     object-fit: contain;
     border-radius: 8px;
-    border: 1px solid var(--cork-line);
-    background: var(--wood-900);
+    border: 1px solid #202b3d;
+    background: #131924;
     cursor: zoom-in;
     transition: transform 0.2s ease, box-shadow 0.2s ease;
   }
   .invoice-photo-preview:hover {
-    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.6);
   }
   .invoice-photo-actions {
     display: flex;
@@ -582,23 +692,24 @@
   }
   .invoice-photo-empty {
     padding: 18px 12px;
-    border: 1px dashed var(--amber);
+    border: 1px dashed #f59e0b;
     border-radius: 8px;
-    background: rgba(209,154,61,0.08);
+    background: rgba(245, 158, 11, 0.08);
     text-align: center;
     margin-bottom: 16px;
   }
   .invoice-empresa-card {
-    background: var(--wood-900);
-    border: 1px solid var(--cork-line);
-    border-left: 3px solid var(--amber);
+    background: #0e1626;
+    border: 1px solid #1e3352;
+    border-left: 4px solid #3b82f6;
     border-radius: var(--radius);
     padding: 12px 14px;
     margin-bottom: 14px;
   }
   .badge-empresa {
-    background: rgba(209,154,61,0.18);
-    color: var(--amber-bright);
+    background: #0f233d;
+    color: #60a5fa;
+    border: 1px solid #1d4ed8;
     font-size: 11px;
     font-weight: 700;
     padding: 2px 8px;
@@ -606,19 +717,21 @@
     font-family: var(--font-mono);
   }
   .badge-photo {
-    background: rgba(111,154,92,0.2);
-    color: var(--good);
+    background: #0c2b18;
+    color: #4ade80;
+    border: 1px solid #16a34a;
     font-size: 10.5px;
     font-weight: 600;
-    padding: 2px 6px;
+    padding: 2px 7px;
     border-radius: 4px;
   }
   .badge-no-photo {
-    background: rgba(193,80,46,0.2);
-    color: var(--bad);
+    background: #2f1317;
+    color: #fb7185;
+    border: 1px solid #be123c;
     font-size: 10.5px;
     font-weight: 600;
-    padding: 2px 6px;
+    padding: 2px 7px;
     border-radius: 4px;
   }
   .export-action-grid {
@@ -1179,38 +1292,58 @@
     
     <div id="invoice-results" class="hidden" style="margin-top:20px;">
       <hr class="divider">
-      <div class="section-label">Datos del Emisor / Empresa</div>
-      <div class="field-row">
-        <div class="field">
-          <label>Empresa / Distribuidora / Proveedor</label>
-          <input type="text" id="scan-empresa" placeholder="Ej: DINADEC S.A., Cervecería Nacional">
+      
+      <!-- Card Proveedor & RUC -->
+      <div class="card-supplier">
+        <div style="font-size:11px; text-transform:uppercase; color:var(--blue-bright); font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+          <span>🏢</span> Datos del Proveedor / Emisor
         </div>
-        <div class="field">
-          <label>RUC del Emisor</label>
-          <input type="text" id="scan-ruc" placeholder="Ej: 1790008759001">
-        </div>
-      </div>
-
-      <div class="section-label">Comprobante &amp; Fechas</div>
-      <div class="field-row">
-        <div class="field" style="flex:1.2;">
-          <label>Número de Factura</label>
-          <input type="text" id="scan-numero-factura" placeholder="001-001-000123456">
-        </div>
-        <div class="field">
-          <label>Fecha Emisión (Compra)</label>
-          <input type="date" id="scan-fecha-emision">
-        </div>
-        <div class="field">
-          <label>Fecha Vencimiento</label>
-          <input type="date" id="scan-fecha-vencimiento">
+        <div class="field-row">
+          <div class="field" style="margin-bottom:0;">
+            <label>Empresa / Distribuidora</label>
+            <input type="text" id="scan-empresa" placeholder="Ej: DINADEC S.A., Cervecería Nacional" style="margin-bottom:0;">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>RUC del Emisor</label>
+            <input type="text" id="scan-ruc" placeholder="Ej: 1790008759001" style="margin-bottom:0; font-family:var(--font-mono);">
+          </div>
         </div>
       </div>
 
-      <div id="invoice-header-summary" style="margin-bottom: 12px; font-size: 13px; color: var(--cream-dim);"></div>
-      <label>Revisión y cálculo de paquetes/unidades:</label>
+      <!-- Card Factura & Fechas -->
+      <div class="card-dates">
+        <div style="font-size:11px; text-transform:uppercase; color:var(--purple-bright); font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+          <span>🧾</span> Comprobante &amp; Fechas
+        </div>
+        <div class="field-row">
+          <div class="field" style="flex:1.2; margin-bottom:0;">
+            <label>Número de Factura</label>
+            <input type="text" id="scan-numero-factura" placeholder="001-001-000123456" style="margin-bottom:0; font-family:var(--font-mono);">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Fecha Emisión (Compra)</label>
+            <input type="date" id="scan-fecha-emision" style="margin-bottom:0;">
+          </div>
+          <div class="field" style="margin-bottom:0;">
+            <label>Fecha Vencimiento</label>
+            <input type="date" id="scan-fecha-vencimiento" style="margin-bottom:0;">
+          </div>
+        </div>
+      </div>
+
+      <!-- Totales Financieros OCR -->
+      <div id="invoice-header-summary" style="margin-bottom: 14px;"></div>
+      
+      <!-- Listado de Productos -->
+      <div class="section-label" style="display:flex; justify-content:space-between; align-items:center; margin: 18px 0 10px;">
+        <span style="color:var(--cream); font-size:12.5px;">📦 Productos Detectados en Factura</span>
+        <span id="scan-items-count-badge" class="badge badge-ok">0 ítems</span>
+      </div>
       <div id="invoice-items-list"></div>
-      <button class="btn btn-primary btn-block" id="btn-save-invoice" style="margin-top: 14px;">Guardar e Ingresar Stock</button>
+      
+      <button class="btn btn-primary btn-block" id="btn-save-invoice" style="margin-top: 16px; font-size:14.5px; padding:13px 18px;">
+        💾 Guardar Factura e Ingresar Stock
+      </button>
     </div>
   </div>
 </div>
@@ -1787,16 +1920,18 @@ function prodItemHTML(p, isVentas = false){
     }
   }
 
-  const catText = p.categorias ? p.categorias.nombre : '<span style="color:var(--bad);">⚠ Sin categoría</span>';
-  const subcatText = p.subcategoria ? ` · 🏷 ${p.subcategoria}` : '';
+  const catText = p.categorias 
+    ? `<span style="color:var(--blue-bright); font-weight:600;">🏷 ${escapeHtml(p.categorias.nombre)}</span>` 
+    : `<span style="color:var(--bad); font-weight:600;">⚠ Sin categoría</span>`;
+  const subcatText = p.subcategoria ? `<span style="color:var(--purple-bright); margin-left:4px;">· ${escapeHtml(p.subcategoria)}</span>` : '';
 
   return `
     <div class="prod-item" onclick="${clickAction}">
       <div class="prod-thumb">${img ? `<img src="${img.url_imagen}" alt="">` : '🍾'}</div>
       <div class="prod-info">
-        <div class="prod-name">${p.nombre}</div>
+        <div class="prod-name">${escapeHtml(p.nombre)}</div>
         <div class="prod-meta">${catText}${subcatText}</div>
-        <div class="prod-cost-sub">Costo c/IVA: ${money(costoConIva)}</div>
+        <div class="prod-cost-sub">Costo c/IVA: <b style="color:var(--cream);">${money(costoConIva)}</b></div>
         ${caducidadBadge}
       </div>
       <div class="prod-right">
@@ -3064,14 +3199,19 @@ window.verDetalleFactura = async function(facturaId) {
   document.getElementById('det-fac-titulo').textContent = `Factura #${fac.numero_factura || fac.id}`;
   document.getElementById('det-fac-sub').textContent = `Registrada en sistema: ${new Date(fac.fecha_registro).toLocaleString()}`;
   
-  // Banner de Empresa & RUC
+  // Banner de Empresa & RUC (Card Supplier)
+  document.getElementById('det-fac-empresa-card').className = 'card-supplier';
   document.getElementById('det-fac-empresa-card').innerHTML = `
-    <div style="display:flex; justify-content:space-between; align-items:baseline; flex-wrap:wrap; gap:4px;">
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:6px;">
       <div>
-        <div style="font-size:11px; text-transform:uppercase; color:var(--cream-faint); font-weight:700;">Empresa Emisora / Proveedor</div>
-        <b style="font-size:15px; color:var(--amber-bright);">${escapeHtml(empName)}</b>
+        <div style="font-size:11px; text-transform:uppercase; color:var(--blue-bright); font-weight:700; display:flex; align-items:center; gap:4px; margin-bottom:4px;">
+          <span>🏢</span> Empresa Emisora / Proveedor
+        </div>
+        <b style="font-size:16px; color:var(--cream);">${escapeHtml(empName)}</b>
       </div>
-      <div style="font-size:12px; color:var(--cream-dim); font-family:var(--font-mono);">RUC: <b>${escapeHtml(ruc)}</b></div>
+      <div style="font-size:12px; color:var(--cream-dim); font-family:var(--font-mono); background:#0c121d; padding:4px 8px; border-radius:6px; border:1px solid #1e2e47;">
+        RUC: <b style="color:var(--blue-bright);">${escapeHtml(ruc)}</b>
+      </div>
     </div>
   `;
 
@@ -3098,17 +3238,41 @@ window.verDetalleFactura = async function(facturaId) {
     `;
   }
 
-  // Fechas y Totales
-  document.getElementById('det-fac-fechas-card').innerHTML = `
-    <div style="display:flex; justify-content:space-between; margin-bottom:4px;"><span>Fecha de Compra / Emisión:</span><b>${fechaCompra}</b></div>
-    <div style="display:flex; justify-content:space-between;"><span>Vencimiento Pago:</span><b style="color:var(--amber-bright);">${fac.fecha_vencimiento || 'Contado'}</b></div>
+  // Fechas (Card Dates)
+  const fechasCard = document.getElementById('det-fac-fechas-card');
+  fechasCard.className = 'card-dates';
+  fechasCard.innerHTML = `
+    <div style="font-size:11px; text-transform:uppercase; color:var(--purple-bright); font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:4px;">
+      <span>📅</span> Fechas y Vencimiento
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:13px;">
+      <span style="color:var(--cream-dim);">Fecha de Compra / Emisión:</span>
+      <b style="color:var(--cream);">${fechaCompra}</b>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-size:13px;">
+      <span style="color:var(--cream-dim);">Vencimiento de Pago:</span>
+      <b style="color:var(--purple-bright);">${fac.fecha_vencimiento || 'Contado'}</b>
+    </div>
   `;
 
-  document.getElementById('det-fac-totales').innerHTML = `
-    <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:13.5px;"><span>Subtotal:</span><span>${money(fac.subtotal)}</span></div>
-    <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:13.5px;"><span>IVA (15%):</span><span>${money(fac.iva)}</span></div>
-    <div style="display:flex; justify-content:space-between; font-weight:700; font-size:16px; color:var(--amber-bright); border-top:1px solid var(--cork-line); padding-top:6px;">
-      <span>Total de la Factura:</span><span>${money(fac.total)}</span>
+  // Totales (Card Financial)
+  const totalesCard = document.getElementById('det-fac-totales');
+  totalesCard.className = 'card-financial';
+  totalesCard.innerHTML = `
+    <div style="font-size:11px; text-transform:uppercase; color:var(--amber-bright); font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:4px;">
+      <span>💰</span> Resumen Financiero
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-bottom:4px; font-size:13px;">
+      <span style="color:var(--cream-dim);">Subtotal s/IVA:</span>
+      <span style="font-family:var(--font-mono);">${money(fac.subtotal)}</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px;">
+      <span style="color:var(--cream-dim);">IVA (15%):</span>
+      <span style="font-family:var(--font-mono);">${money(fac.iva)}</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; font-weight:700; font-size:16px; color:var(--amber-bright); border-top:1px solid #4a3412; padding-top:6px;">
+      <span>Total de la Factura:</span>
+      <span style="font-family:var(--font-mono); font-size:17px;">${money(fac.total)}</span>
     </div>
   `;
 
@@ -3116,18 +3280,20 @@ window.verDetalleFactura = async function(facturaId) {
   document.getElementById('det-fac-lineas').innerHTML = (lineas||[]).map(l => {
     const esPersonal = !l.producto_id;
     return `
-      <div class="cart-item">
-        <div style="flex:1; padding-right:8px;">
-          <div class="cart-item-name">
-            ${l.productos ? l.productos.nombre : l.nombre_detectado}
-            ${esPersonal ? '<span class="badge badge-warn" style="margin-left:4px;">👤 Uso Personal</span>' : ''}
+      <div style="background:#0f1420; border:1px solid #23344d; border-radius:8px; padding:10px 12px; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:8px;">
+        <div style="flex:1; min-width:0; padding-right:6px;">
+          <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-bottom:3px;">
+            <b style="font-size:13.5px; color:var(--cream);">${escapeHtml(l.productos ? l.productos.nombre : l.nombre_detectado)}</b>
+            ${esPersonal ? '<span class="badge badge-combo" style="font-size:10px;">👤 Uso Personal</span>' : `<span class="badge badge-ok" style="font-size:10px;">+${l.cantidad} unidades</span>`}
           </div>
-          <div class="cart-item-meta">
-            ${esPersonal ? 'Gasto no ingresado al inventario de venta' : `Unidades ingresadas: ${l.cantidad}`} | P. Unitario c/IVA: ${money(l.precio_unitario_con_iva)}
-            ${l.fecha_caducidad ? `<br><b style="color:var(--amber);">⌛ Caduca: ${l.fecha_caducidad}</b>`:''}
+          <div style="font-size:11.5px; color:var(--cream-dim);">
+            ${esPersonal ? 'Gasto registrado (no inventariado)' : `P. Unitario c/IVA: <b style="color:var(--cream); font-family:var(--font-mono);">${money(l.precio_unitario_con_iva)}</b>`}
+            ${l.fecha_caducidad ? `<span style="color:var(--amber-bright); margin-left:6px;">⌛ Caduca: ${l.fecha_caducidad}</span>`:''}
           </div>
         </div>
-        <div class="cart-item-price">${money(l.subtotal)}</div>
+        <div style="font-family:var(--font-mono); font-weight:700; font-size:14.5px; color:var(--amber-bright); flex-shrink:0;">
+          ${money(l.subtotal)}
+        </div>
       </div>
     `;
   }).join('');
@@ -3309,11 +3475,23 @@ document.getElementById('btn-process-invoice')?.addEventListener('click', async 
     if(tempFacturaData.fecha_vencimiento) document.getElementById('scan-fecha-vencimiento').value = tempFacturaData.fecha_vencimiento;
 
     document.getElementById('invoice-header-summary').innerHTML = `
-      <b>Empresa:</b> ${tempFacturaData.empresa_emisor || 'No identificada'} | 
-      <b>Subtotal:</b> ${money(tempFacturaData.subtotal)} | 
-      <b>IVA:</b> ${money(tempFacturaData.iva)} | 
-      <b>Total:</b> ${money(tempFacturaData.total)}
+      <div class="card-financial" style="margin-bottom:0; padding:12px 14px;">
+        <div style="font-size:11px; text-transform:uppercase; color:var(--amber-bright); font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+          <span>💰</span> Resumen Financiero OCR
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:8px; font-size:12px;">
+          <div>Subtotal s/IVA:<br><b style="font-size:14px; color:var(--cream); font-family:var(--font-mono);">${money(tempFacturaData.subtotal)}</b></div>
+          <div>IVA (15%):<br><b style="font-size:14px; color:var(--cream); font-family:var(--font-mono);">${money(tempFacturaData.iva)}</b></div>
+          <div>Total Factura:<br><b style="font-size:16px; color:var(--amber-bright); font-family:var(--font-mono);">${money(tempFacturaData.total)}</b></div>
+        </div>
+      </div>
     `;
+
+    const countBadge = document.getElementById('scan-items-count-badge');
+    if(countBadge) {
+      const totalIt = (tempFacturaData.items || []).filter(it => !it.es_servicio).length;
+      countBadge.textContent = `${totalIt} producto(s)`;
+    }
 
     renderMappingRows();
     document.getElementById('invoice-results').classList.remove('hidden');
@@ -3341,62 +3519,85 @@ function renderMappingRows() {
     const totalUnidades = bultos * factor;
 
     const precioBulto = item.precio_bulto_sin_iva || (item.subtotal / bultos);
-    const costoUnitarioSinIva = precioBulto / factor;
+    const costoUnitarioSinIva = factor > 0 ? (precioBulto / factor) : precioBulto;
     const costoUnitarioConIva = costoUnitarioSinIva * 1.15;
 
     return `
       <div class="invoice-line-card" id="inv-card-${idx}">
-        <div style="margin-bottom:10px; display:flex; align-items:center; gap:8px; background:var(--wood-900); padding:6px 10px; border-radius:6px; border:1px solid var(--cork-line);">
-          <input type="checkbox" id="map-inventariar-${idx}" checked onchange="toggleInventariarItem(${idx})" style="width:auto; margin:0; cursor:pointer;">
-          <label for="map-inventariar-${idx}" style="margin:0; font-size:12px; font-weight:600; color:var(--amber-bright); cursor:pointer;">
-            📦 Ingresar al inventario para venta (desmarca si es uso/consumo personal)
-          </label>
+        <!-- Header de la línea -->
+        <div class="invoice-line-header">
+          <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
+            <span class="badge-item-num">Ítem #${idx + 1}</span>
+            <span style="font-weight:600; font-size:13.5px; color:var(--cream); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${escapeHtml(nombreSugerido)}">
+              ${escapeHtml(nombreSugerido)}
+            </span>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <input type="checkbox" id="map-inventariar-${idx}" checked onchange="toggleInventariarItem(${idx})" style="width:auto; margin:0; cursor:pointer;">
+            <label for="map-inventariar-${idx}" id="map-inventariar-label-${idx}" class="badge-toggle-inv" style="margin:0;">
+              📦 Para Venta
+            </label>
+          </div>
         </div>
 
         <div id="inv-details-section-${idx}">
-          <div class="field" style="margin-bottom:6px;">
-            <label>Nombre del Producto (Limpio):</label>
+          <!-- Nombre Limpio -->
+          <div class="field" style="margin-bottom:8px;">
+            <label>Nombre del Producto en Catálogo</label>
             <input type="text" id="map-clean-name-${idx}" value="${escapeHtml(nombreSugerido)}" style="margin-bottom:0; font-weight:600;">
           </div>
 
-          <div class="field-row" style="margin-bottom:6px;">
+          <!-- Bultos, Factor y Precio -->
+          <div class="field-row" style="margin-bottom:8px; gap:8px;">
             <div class="field" style="margin-bottom:0;">
-              <label>Bultos / Cajas</label>
-              <input type="number" id="map-bultos-${idx}" value="${bultos}" min="1" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0;">
+              <label>Cajas / Bultos</label>
+              <input type="number" id="map-bultos-${idx}" value="${bultos}" min="1" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700;">
             </div>
             <div class="field" style="margin-bottom:0;">
-              <label>Unidades por Bulto</label>
-              <input type="number" id="map-factor-${idx}" value="${factor}" min="1" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0;">
+              <label>Unidades x Caja</label>
+              <input type="number" id="map-factor-${idx}" value="${factor}" min="1" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700;">
             </div>
             <div class="field" style="margin-bottom:0;">
               <label>Precio Caja s/IVA</label>
-              <input type="number" step="0.01" id="map-precio-bulto-${idx}" value="${precioBulto.toFixed(2)}" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0;">
+              <input type="number" step="0.01" id="map-precio-bulto-${idx}" value="${precioBulto.toFixed(2)}" oninput="recalcInvoiceLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700;">
             </div>
           </div>
 
-          <div class="price-calc-box" style="margin-bottom:8px; padding:8px 12px;">
-            <div style="display:flex; justify-content:space-between; font-size:12.5px;">
-              <span>Stock a ingresar: <b id="map-total-units-badge-${idx}" style="color:var(--amber-bright); font-family:var(--font-mono);">${totalUnidades} unidades</b></span>
-              <span>Costo c/IVA por unidad: <b id="map-unit-cost-badge-${idx}" style="color:var(--good); font-family:var(--font-mono);">${money(costoUnitarioConIva)}</b></span>
+          <!-- Resumen de Stock & Costo Inmediato -->
+          <div class="invoice-line-calc-box">
+            <div>
+              <span style="font-size:11px; text-transform:uppercase; color:var(--cream-faint); display:block; font-weight:600;">Stock a Ingresar</span>
+              <b id="map-total-units-badge-${idx}" style="color:var(--good-bright); font-size:15px; font-family:var(--font-mono);">+${totalUnidades} unidades</b>
+            </div>
+            <div style="text-align:right;">
+              <span style="font-size:11px; text-transform:uppercase; color:var(--cream-faint); display:block; font-weight:600;">Costo Unitario c/IVA</span>
+              <b id="map-unit-cost-badge-${idx}" style="color:var(--amber-bright); font-size:15px; font-family:var(--font-mono);">${money(costoUnitarioConIva)}</b>
             </div>
           </div>
 
-          <div class="field" style="margin-bottom:6px;">
-            <label>Vincular a inventario:</label>
+          <!-- Vincular a Catálogo -->
+          <div class="field" style="margin-bottom:8px;">
+            <label>Vincular con Producto Existente o Crear Nuevo</label>
             <select id="map-prod-${idx}" style="margin-bottom:0;">
               <option value="__auto_create__" ${!match ? 'selected':''}>➕ Crear como nuevo producto ("${escapeHtml(nombreSugerido)}")</option>
-              ${productos.map(p => `<option value="${p.id}" ${match && match.id===p.id?'selected':''}>Vincular a: ${escapeHtml(p.nombre)} (Stock actual: ${p.stock_actual})</option>`).join('')}
+              ${productos.map(p => `<option value="${p.id}" ${match && match.id===p.id?'selected':''}>🔗 Vincular a: ${escapeHtml(p.nombre)} (Stock actual: ${p.stock_actual})</option>`).join('')}
             </select>
           </div>
 
+          <!-- Caducidad -->
           <div class="field" style="margin-bottom:0;">
-            <label>Fecha de caducidad del lote (opcional):</label>
+            <label>Fecha de Caducidad del Lote (Opcional)</label>
             <input type="date" id="map-caducidad-${idx}" style="margin-bottom:0;">
           </div>
         </div>
 
-        <div id="inv-personal-badge-${idx}" class="hidden" style="padding:8px 0; color:var(--cream-faint); font-size:12px;">
-          👤 <i>Este ítem se guardará en el comprobante de la factura pero <b>no ingresará unidades al inventario</b>.</i>
+        <div id="inv-personal-badge-${idx}" class="hidden invoice-personal-box">
+          <div style="display:flex; align-items:center; gap:6px; font-weight:700;">
+            <span>👤</span> Marcado como Uso / Consumo Personal
+          </div>
+          <p style="margin:4px 0 0; font-size:11.5px; opacity:0.9;">
+            Este gasto se registrará en el comprobante pero <b>no ingresará unidades al inventario</b> de venta.
+          </p>
         </div>
       </div>
     `;
@@ -3408,10 +3609,17 @@ window.toggleInventariarItem = function(idx) {
   const card = document.getElementById(`inv-card-${idx}`);
   const details = document.getElementById(`inv-details-section-${idx}`);
   const badge = document.getElementById(`inv-personal-badge-${idx}`);
+  const label = document.getElementById(`map-inventariar-label-${idx}`);
 
   card.classList.toggle('dimmed', !isChecked);
   details.classList.toggle('hidden', !isChecked);
   badge.classList.toggle('hidden', isChecked);
+  
+  if(label) {
+    label.textContent = isChecked ? '📦 Para Venta' : '👤 Uso Personal';
+    label.style.color = isChecked ? 'var(--good-bright)' : 'var(--purple-bright)';
+    label.style.borderColor = isChecked ? 'rgba(34, 197, 94, 0.35)' : 'rgba(139, 92, 246, 0.35)';
+  }
 };
 
 window.recalcInvoiceLineTotals = function(idx) {
@@ -3423,7 +3631,7 @@ window.recalcInvoiceLineTotals = function(idx) {
   const costoUnitarioSinIva = factor > 0 ? (precioBulto / factor) : 0;
   const costoUnitarioConIva = costoUnitarioSinIva * 1.15;
 
-  document.getElementById(`map-total-units-badge-${idx}`).textContent = `${totalUnidades} unidades`;
+  document.getElementById(`map-total-units-badge-${idx}`).textContent = `+${totalUnidades} unidades`;
   document.getElementById(`map-unit-cost-badge-${idx}`).textContent = money(costoUnitarioConIva);
 };
 
@@ -4010,25 +4218,34 @@ function renderReconciliationList() {
     const isDesfasado = diff !== 0;
 
     return `
-      <div style="background:var(--wood-900); border:1px solid var(--cork-line); border-radius:8px; padding:10px 12px; margin-bottom:8px;">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:6px; flex-wrap:wrap; gap:4px;">
+      <div style="background:#131924; border:1px solid #24344d; border-radius:10px; padding:12px 14px; margin-bottom:10px; box-shadow:0 2px 8px rgba(0,0,0,0.25);">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
           <div>
-            <b style="font-size:13.5px; color:var(--cream);">${escapeHtml(r.nombre)}</b>
-            <div style="font-size:11.5px; color:var(--cream-faint);">🏷 ${escapeHtml(r.categoria)}</div>
+            <b style="font-size:14px; color:var(--cream);">${escapeHtml(r.nombre)}</b>
+            <div style="font-size:11.5px; color:var(--blue-bright);">🏷 ${escapeHtml(r.categoria)}</div>
           </div>
-          ${isDesfasado ? `<span class="badge badge-warn" style="font-size:10px;">Desfase: ${diff > 0 ? '+'+diff : diff}</span>` : `<span class="badge badge-ok" style="font-size:10px;">✓ Cuadrado</span>`}
+          ${isDesfasado ? `<span class="badge badge-warn" style="font-size:10.5px;">Desfase: ${diff > 0 ? '+'+diff : diff}</span>` : `<span class="badge badge-ok" style="font-size:10.5px;">✓ Cuadrado</span>`}
         </div>
 
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px; background:var(--wood-950); padding:6px 10px; border-radius:6px; font-size:11.5px; margin-bottom:8px;">
-          <div>Facturas Compradas:<br><b style="color:var(--good);">+${r.compradas} ${r.unidad_base}</b></div>
-          <div>Total Vendido:<br><b style="color:var(--bad);">-${r.vendidas} ${r.unidad_base}</b></div>
-          <div>Calculado (Compras - Ventas):<br><b style="color:var(--amber-bright);">${r.calculado} ${r.unidad_base}</b></div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px; margin-bottom:10px;">
+          <div style="background:#0c1f14; border:1px solid #184728; padding:6px 8px; border-radius:6px; font-size:11px;">
+            <span style="color:var(--cream-faint); text-transform:uppercase; font-size:10px; display:block;">Facturas:</span>
+            <b style="color:var(--good-bright); font-size:13px; font-family:var(--font-mono);">+${r.compradas} ${r.unidad_base}</b>
+          </div>
+          <div style="background:#241216; border:1px solid #4d1c25; padding:6px 8px; border-radius:6px; font-size:11px;">
+            <span style="color:var(--cream-faint); text-transform:uppercase; font-size:10px; display:block;">Vendido:</span>
+            <b style="color:var(--bad-bright); font-size:13px; font-family:var(--font-mono);">-${r.vendidas} ${r.unidad_base}</b>
+          </div>
+          <div style="background:#211709; border:1px solid #4a3411; padding:6px 8px; border-radius:6px; font-size:11px;">
+            <span style="color:var(--cream-faint); text-transform:uppercase; font-size:10px; display:block;">Calculado:</span>
+            <b style="color:var(--amber-bright); font-size:13px; font-family:var(--font-mono);">${r.calculado} ${r.unidad_base}</b>
+          </div>
         </div>
 
         <div style="display:flex; align-items:center; gap:8px; justify-content:flex-end;">
           <label style="margin:0; font-size:12px; color:var(--cream-dim);">Stock Real / Final:</label>
-          <input type="number" id="reconcile-input-${r.id}" min="0" value="${r.stock_actual}" style="width:85px; margin-bottom:0; text-align:center; font-weight:700; font-family:var(--font-mono);">
-          <button type="button" class="btn btn-ghost" onclick="setReconcileInputVal(${r.id}, ${r.calculado})" style="padding:6px 10px; font-size:11.5px;">
+          <input type="number" id="reconcile-input-${r.id}" min="0" value="${r.stock_actual}" style="width:85px; margin-bottom:0; text-align:center; font-weight:700; font-family:var(--font-mono); background:#0c111a; border-color:#2e3e57;">
+          <button type="button" class="btn btn-ghost" onclick="setReconcileInputVal(${r.id}, ${r.calculado})" style="padding:6px 10px; font-size:11.5px; border-color:var(--amber-border); color:var(--amber-bright);">
             ⚡ Usar ${r.calculado}
           </button>
         </div>
