@@ -279,6 +279,10 @@
   .badge-low { background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
   .badge-warn { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }
   .badge-combo { background: rgba(139, 92, 246, 0.18); color: #c084fc; border: 1px solid rgba(139, 92, 246, 0.35); }
+  @keyframes pulse-warn {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.5); }
+    50% { opacity: 0.85; box-shadow: 0 0 0 5px rgba(249, 115, 22, 0); }
+  }
 
   .empty { text-align: center; padding: 45px 20px; color: var(--cream-faint); }
   .empty .ico { font-size: 32px; margin-bottom: 8px; display: block; }
@@ -1117,7 +1121,10 @@
 
       <div class="field">
         <label>Fecha de caducidad del lote actual</label>
-        <input type="date" id="edit-p-fecha-caducidad">
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <input type="date" id="edit-p-fecha-caducidad" style="margin-bottom:0; flex:1;" oninput="updateExpiryPill()">
+          <div id="edit-expiry-pill" style="display:none; align-items:center; gap:5px; border-radius:20px; padding:4px 11px; font-size:12px; font-weight:600; border:1px solid; transition:all 0.2s;"></div>
+        </div>
       </div>
 
       <div class="section-label">Costos &amp; Precios</div>
@@ -1465,28 +1472,89 @@
     <button class="modal-close" onclick="document.getElementById('modal-reconciliar-stock').classList.add('hidden')">×</button>
     <h2>⚖️ Conciliación &amp; Auditoría de Stock</h2>
     <div class="modal-sub">
-      Audita y sincroniza las cantidades de inventario frente a las <b>facturas de compra activas</b> y <b>ventas registradas</b>.
-      Si eliminaste facturas anteriormente, puedes ajustar el stock exacto aquí con 1 clic.
+      Sincroniza las cantidades de inventario contra tus <b>facturas de compra</b> y <b>ventas</b>.
+      El valor <b>Calculado</b> = Total comprado − Total vendido. Úsalo para corregir desfases con 1 clic.
     </div>
 
+    <!-- Banner de desfases detectados -->
+    <div id="reconcile-alert-banner" style="display:none; background:linear-gradient(135deg,#1a0d00,#2a1800); border:1px solid #c0742a; border-radius:10px; padding:10px 14px; margin-bottom:12px; font-size:13px; color:#f5c26b; display:flex; align-items:center; gap:10px;">
+      <span style="font-size:18px;">⚠️</span>
+      <span id="reconcile-alert-text">Cargando...</span>
+    </div>
+
+    <!-- Botón 1-Clic principal -->
+    <button type="button" class="btn btn-primary btn-block" id="btn-one-click-reconcile" onclick="oneClickReconcileAll()" style="margin-bottom:10px; background:linear-gradient(135deg,#1a4a1a,#2a7a2a); border-color:#2a7a2a; font-size:14px; padding:13px;">
+      ⚡ Conciliar Todo con 1 Clic (Aplicar Valores Calculados al Inventario)
+    </button>
+
     <div style="display:flex; justify-content:space-between; gap:8px; margin-bottom:12px; flex-wrap:wrap;">
-      <input type="text" id="reconcile-search-input" placeholder="Filtrar producto en auditoría…" style="flex:1; margin-bottom:0;" oninput="renderReconciliationList()">
+      <input type="text" id="reconcile-search-input" placeholder="Buscar producto…" style="flex:1; margin-bottom:0;" oninput="renderReconciliationList()">
       <button type="button" class="btn btn-ghost" onclick="autoFillCalculatedStockAll()" style="font-size:12px; padding:8px 12px;">
-        ⚡ Usar Todo Calculado (Compras - Ventas)
+        ✏️ Solo Llenar Valores
       </button>
     </div>
 
-    <div class="card" id="reconciliation-list-container" style="max-height: 400px; overflow-y: auto; margin-bottom: 16px; padding: 10px;">
+    <div class="card" id="reconciliation-list-container" style="max-height: 380px; overflow-y: auto; margin-bottom: 16px; padding: 10px;">
       <div class="empty">Calculando auditoría de inventario…</div>
     </div>
 
-    <button type="button" class="btn btn-primary btn-block" id="btn-save-reconciliation">
-      💾 Guardar Todos los Ajustes de Stock en Supabase
+    <button type="button" class="btn btn-ghost btn-block" id="btn-save-reconciliation" style="border-color:#2e3e57; color:var(--cream-dim);">
+      💾 Guardar Solo los Cambios Modificados Manualmente
     </button>
   </div>
 </div>
 
 <script>
+// =====================================================================
+// UTILIDAD: CÁPSULA DE VENCIMIENTO EN TIEMPO REAL (MODAL EDICIÓN)
+// =====================================================================
+function updateExpiryPill() {
+  const input = document.getElementById('edit-p-fecha-caducidad');
+  const pill = document.getElementById('edit-expiry-pill');
+  if(!input || !pill) return;
+
+  const val = input.value;
+  if(!val) { pill.style.display = 'none'; return; }
+
+  const [y, m, d] = val.split('-').map(Number);
+  const fechaVenc = new Date(y, m - 1, d);
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const dias = Math.ceil((fechaVenc - hoy) / (1000 * 60 * 60 * 24));
+
+  pill.style.display = 'flex';
+
+  if(dias <= 0) {
+    pill.textContent = `❌ Vencido hace ${Math.abs(dias)} día(s)`;
+    pill.style.background = '#2a0808';
+    pill.style.borderColor = '#8b1a1a';
+    pill.style.color = '#ef4444';
+    pill.style.animation = '';
+  } else if(dias <= 7) {
+    pill.textContent = `🔥 Vence en ${dias} día(s) — ¡URGENTE!`;
+    pill.style.background = '#2a1008';
+    pill.style.borderColor = '#c05a10';
+    pill.style.color = '#f97316';
+    pill.style.animation = 'pulse-warn 1.2s infinite';
+  } else if(dias <= 30) {
+    pill.textContent = `⏳ Vence en ${dias} días`;
+    pill.style.background = '#241a06';
+    pill.style.borderColor = '#a07020';
+    pill.style.color = '#fbbf24';
+    pill.style.animation = '';
+  } else if(dias <= 90) {
+    pill.textContent = `📅 Vence en ${dias} días`;
+    pill.style.background = '#0c1a0c';
+    pill.style.borderColor = '#1e5a1e';
+    pill.style.color = '#86efac';
+    pill.style.animation = '';
+  } else {
+    pill.textContent = `✅ ${dias} días hasta vencimiento`;
+    pill.style.background = '#0a1220';
+    pill.style.borderColor = '#1e3050';
+    pill.style.color = 'var(--cream-dim)';
+    pill.style.animation = '';
+  }
+}
 // =====================================================================
 // SUPABASE CONFIG & ESTADO
 // =====================================================================
@@ -1912,11 +1980,52 @@ function prodItemHTML(p, isVentas = false){
 
   let caducidadBadge = '';
   if(p.fecha_caducidad){
-    const diasRestantes = Math.ceil((new Date(p.fecha_caducidad) - new Date()) / (1000 * 60 * 60 * 24));
+    // Normalizar a medianoche local para evitar desfases de zona horaria
+    const [y, m, d] = p.fecha_caducidad.split('-').map(Number);
+    const fechaVenc = new Date(y, m - 1, d);
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    const diasRestantes = Math.ceil((fechaVenc - hoy) / (1000 * 60 * 60 * 24));
+
     if(diasRestantes <= 0){
-      caducidadBadge = `<span class="badge badge-low" style="margin-top:4px;">❌ Vencido (${p.fecha_caducidad})</span>`;
+      // VENCIDO
+      caducidadBadge = `
+        <div style="margin-top:5px; display:inline-flex; align-items:center; gap:5px;
+                    background:#2a0808; border:1px solid #8b1a1a; border-radius:20px;
+                    padding:3px 9px; font-size:11px; font-weight:700; color:#ef4444;">
+          ❌ VENCIDO hace ${Math.abs(diasRestantes)} día(s)
+        </div>`;
+    } else if(diasRestantes <= 7){
+      // MUY URGENTE - 7 días o menos
+      caducidadBadge = `
+        <div style="margin-top:5px; display:inline-flex; align-items:center; gap:5px;
+                    background:#2a1008; border:1px solid #c05a10; border-radius:20px;
+                    padding:3px 9px; font-size:11px; font-weight:700; color:#f97316; animation: pulse-warn 1.2s infinite;">
+          🔥 Vence en <b>${diasRestantes} día(s)</b>
+        </div>`;
     } else if(diasRestantes <= 30){
-      caducidadBadge = `<span class="badge badge-warn" style="margin-top:4px;">⌛ Vence en ${diasRestantes}d (${p.fecha_caducidad})</span>`;
+      // ALERTA - 30 días
+      caducidadBadge = `
+        <div style="margin-top:5px; display:inline-flex; align-items:center; gap:5px;
+                    background:#241a06; border:1px solid #a07020; border-radius:20px;
+                    padding:3px 9px; font-size:11px; font-weight:600; color:#fbbf24;">
+          ⏳ Vence en ${diasRestantes} días
+        </div>`;
+    } else if(diasRestantes <= 90){
+      // ATENCIÓN - 90 días
+      caducidadBadge = `
+        <div style="margin-top:5px; display:inline-flex; align-items:center; gap:5px;
+                    background:#0c1a0c; border:1px solid #1e5a1e; border-radius:20px;
+                    padding:3px 9px; font-size:11px; font-weight:600; color:#86efac;">
+          📅 Vence en ${diasRestantes} días
+        </div>`;
+    } else {
+      // OK — más de 90 días
+      caducidadBadge = `
+        <div style="margin-top:5px; display:inline-flex; align-items:center; gap:5px;
+                    background:#0a1220; border:1px solid #1e3050; border-radius:20px;
+                    padding:3px 9px; font-size:11px; color:var(--cream-dim);">
+          ✅ ${diasRestantes} días hasta vencimiento
+        </div>`;
     }
   }
 
@@ -2098,6 +2207,7 @@ window.openEditProductModal = function(id) {
   updateSubcatDropdownForEdit(p.subcategoria);
   
   document.getElementById('edit-p-fecha-caducidad').value = p.fecha_caducidad || '';
+  updateExpiryPill();
   document.getElementById('edit-p-precio-sin-iva').value = p.precio_sin_iva;
   document.getElementById('edit-p-iva').value = p.iva_porcentaje || 15;
   document.getElementById('edit-p-precio-venta').value = pres ? pres.precio_venta : 0;
@@ -3415,54 +3525,69 @@ document.getElementById('btn-process-invoice')?.addEventListener('click', async 
   
   try {
     const b64 = (await fileToBase64(currentInvoiceFile)).split(',')[1];
-    const promptText = `Eres un experto contable y de inventarios en Ecuador especializado en facturas y notas de entrega de distribuidoras de licores y consumo masivo (AZENDE LOGISTICS, DINADEC, CERVECERÍA NACIONAL, DIAGEO, etc.).
+    const promptText = `Eres un experto contable y de inventarios en Ecuador especializado en facturas de distribuidoras de licores y bebidas (DINADEC, CERVECERÍA NACIONAL, AZENDE, DIAGEO, BEBIDAS, ETC.).
     Devuelve ÚNICAMENTE un JSON válido y estricto (sin bloques markdown ni comentarios):
     {
-      "empresa_emisor": "Nombre comercial o Razón Social (ej: AZENDE LOGISTICS CIA. LTDA., DINADEC S.A., Cervecería Nacional)",
+      "empresa_emisor": "Nombre comercial o Razón Social (ej: DINADEC S.A., AZENDE LOGISTICS CIA. LTDA., Cervecería Nacional)",
       "ruc_emisor": "RUC de 13 dígitos del emisor",
-      "numero_factura": "047-001-000045822",
+      "numero_factura": "043-003-008487081",
       "fecha_emision": "YYYY-MM-DD",
       "fecha_vencimiento": "YYYY-MM-DD",
-      "subtotal": 55.94,
-      "iva": 8.39,
-      "total": 64.33,
+      "subtotal": 94.26,
+      "iva": 14.15,
+      "total": 108.86,
       "texto_ocr_completo": "Texto completo transcrito",
       "items": [
         {
-          "nombre_limpio": "Nombre comercial claro con su variante de sabor/volumen (ej: 'Switch Bongo 2000cc', 'Zhumir Pink Cl + Maní Zh 50g', 'Zhumir Coco + Maní Zh 50g')",
+          "nombre_limpio": "Nombre comercial limpio sin sufijos ni códigos de bulto (ej: 'Cerveza Corona 269cc', 'Pilsener 269cc Lata', 'Pilsener 355cc Lata', 'Pilsener 473cc Lata', 'Switch Bongo 2000cc', 'Zhumir Pink Cl + Maní Zh 50g')",
           "nombre_original": "Texto original del ítem",
-          "sub_empaque": 12,
-          "cajas": 0,
-          "unidades_sueltas": 8,
-          "unidades_totales": 8,
-          "precio_unitario_sin_iva": 3.4257,
-          "subtotal": 27.41,
+          "sub_empaque": 24,
+          "cajas": 3,
+          "unidades_sueltas": 0,
+          "unidades_totales": 72,
+          "precio_unitario_sin_iva": 0.757,
+          "subtotal": 54.52,
           "es_servicio": false
         }
       ]
     }
 
-    REGLAS FUNDAMENTALES PARA FACTURAS DE DISTRIBUIDORAS EN ECUADOR (AZENDE, DINADEC, ETC.):
-    1. ENCABEZADOS DE CANTIDAD CON SUB-COLUMNAS:
-       Las facturas de licores dividen la sección 'CANTIDAD' en 3 subcolumnas:
-       - 'SUB' (o empaque): Unidades que contiene una caja cerrada (ej: 6, 12, 24). Ponlo en 'sub_empaque'.
-       - 'CAJA': Número de cajas completas pedidas. Ponlo en 'cajas'.
-       - 'UNIDAD': Número de botellas/unidades sueltas pedidas. Ponlo en 'unidades_sueltas'.
-       - 'unidades_totales': DEBE ser EXACTAMENTE: (cajas * sub_empaque) + unidades_sueltas.
-         Ejemplos reales de la factura:
-         * SWITCH BONGO: SUB=6, CAJA=1, UNIDAD=0 -> unidades_totales = (1 * 6) + 0 = 6 unidades.
-         * ZHUMIR PINK: SUB=12, CAJA=0, UNIDAD=8 -> unidades_totales = (0 * 12) + 8 = 8 unidades.
-         * ZHUMIR COCO: SUB=12, CAJA=0, UNIDAD=4 -> unidades_totales = (0 * 12) + 4 = 4 unidades.
-       Si la factura es simple (una sola columna de cantidad), pon sub_empaque=1, cajas=0, unidades_sueltas=cantidad, unidades_totales=cantidad.
+    REGLAS UNIVERSALES DE EXTRACCIÓN PARA TODAS LAS FACTURAS EN ECUADOR:
+    1. FACTURAS DE CERVEZAS Y BEBIDAS (DINADEC / CERVECERÍA NACIONAL / AZENDE):
+       - La columna 'UM' suele ser 'CA' (Caja) o 'PA' (Pack).
+       - En la descripción del producto o empaque se indica cuántas botellas/latas contiene la caja o pack:
+         * 'X24U', 'CAJA X24', 'X24', '24U', 'X24 U' -> sub_empaque = 24.
+         * '6 LATA', '6LATA', 'SIXPACK', '6 PACK', 'PACK X6', '60MLX6', 'X6U', 'X6', '6U' -> sub_empaque = 6.
+         * '12U', 'CAJA X12', '12 BOTELLAS', 'X12' -> sub_empaque = 12.
+         * '30U', '30 LATA' -> sub_empaque = 30.
+       - Si la columna 'UM' es 'CA' o 'PA' (o la factura cobra por cajas/packs):
+         * 'cajas': Es el número en la columna 'CANT' o 'CANTIDAD' (ej: si dice CANT: 3 de Corona X24U -> cajas = 3).
+         * 'unidades_sueltas': 0.
+         * 'unidades_totales': cajas * sub_empaque.
+           Ejemplos reales de DINADEC:
+           - CERVEZA CORONA X24U CAJA MQ: CANT=3 CA -> cajas=3, sub_empaque=24 -> unidades_totales = 3 * 24 = 72 unidades.
+           - PILSENER 269CC NR 6 LATA: CANT=4 CA -> cajas=4, sub_empaque=6 -> unidades_totales = 4 * 6 = 24 latas.
+           - PILSENER 355CC NR 6 LATA TERMO: CANT=2 CA -> cajas=2, sub_empaque=6 -> unidades_totales = 2 * 6 = 12 latas.
+           - PILSENER 473CC NR 6 LATA TERMO: CANT=2 CA -> cajas=2, sub_empaque=6 -> unidades_totales = 2 * 6 = 12 latas.
+       - Si la factura divide en columnas SUB / CAJA / UNIDAD (como AZENDE):
+         * sub_empaque = SUB, cajas = CAJA, unidades_sueltas = UNIDAD -> unidades_totales = (cajas * sub_empaque) + unidades_sueltas.
+       - Si la factura vende unidades sueltas directamente (ej: 12 botellas de licor):
+         * sub_empaque = 1, cajas = 0, unidades_sueltas = CANT -> unidades_totales = CANT.
 
-    2. VALOR UNITARIO Y SUBTOTAL:
-       - 'precio_unitario_sin_iva': Es el 'VALOR UNITARIO' por botella o unidad individual (sin IVA), ej: 2.9617 o 3.4257.
-       - 'subtotal': Es el valor en la columna SUBTOTAL de la línea (ej: 17.77, 27.41, 13.70).
-       - Sanity check: 'unidades_totales * precio_unitario_sin_iva' debe coincidir aproximadamente con el subtotal.
+    2. PRECIO UNITARIO POR BOTELLA/LATA INDIVIDUAL S/IVA:
+       - Si se factura por caja (ej: Corona 24U a $19.13 la caja):
+         'precio_unitario_sin_iva' = subtotal / unidades_totales (ej: $54.52 / 72 = $0.757 por lata).
+       - 'subtotal': Es el valor exacto de la columna TOTAL / SUBTOTAL de la línea en la factura.
 
-    3. NOMBRES Y VARIANTES (CRÍTICO):
-       - Conserva SIEMPRE intacta la variante de sabor o tipo en 'nombre_limpio' (ej: 'Pink', 'Coco', 'Seco', 'Black', 'Bongo 2000cc', 'Limon'). NUNCA unas dos sabores o variantes distintas bajo el mismo nombre.
-       - Líneas no inventariables como 'FLETES', 'INTERESES', 'DESCUENTOS', márcalas con es_servicio: true.`;
+    3. LIMPIEZA DE NOMBRES ('nombre_limpio'):
+       - DEBE remover TODOS los códigos de bulto como 'X24U', 'CAJA MQ', 'NR', '6 LATA', 'TERMO', 'RETORNABLE', 'MQ', 'x1', etc.
+       - Ejemplos:
+         * 'CERVEZA CORONA 269CC X24U CAJA MQ' -> 'Cerveza Corona 269cc'
+         * 'PILSENER 269CC NR 6 LATA' -> 'Pilsener 269cc Lata'
+         * 'PILSENER 355CC NR 6 LATA TERMO' -> 'Pilsener 355cc Lata'
+         * 'PILSENER 473CC NR 6 LATA TERMO' -> 'Pilsener 473cc Lata'
+         * 'Pasta Dental Colgate TripleAccion 60mlx6' -> 'Pasta Dental Colgate Triple Acción 60ml'
+       - Líneas no inventariables como 'INTERESES', 'FLETES', 'DESCUENTOS', márcalas con es_servicio: true.`;
 
     const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${key}`, {
       method: 'POST',
@@ -3519,6 +3644,30 @@ document.getElementById('btn-process-invoice')?.addEventListener('click', async 
   btn.textContent = 'Procesar con IA';
 });
 
+// Función de limpieza universal de nombres de producto (elimina códigos de bulto y empaque)
+function cleanProductName(str) {
+  if(!str) return '';
+  let s = str.trim();
+  // Quitar códigos de bulto y empaque típicos de distribuidoras
+  s = s.replace(/\b(x\s*24\s*u|x\s*24|24\s*u|caja\s*mq|caja\s*x\s*24|caja\s*x\s*12|caja\s*x\s*6|caja|jaba|termo|nr|retornable|ret|mq|bnd|disp|sixpack|pack\s*x\s*\d+|\d+\s*lata|6\s*lata|60mlx6|x\s*12\s*u|x\s*12|12\s*u|x\s*6\s*u|x\s*6|6\s*u|x\s*1\s*un|x1|x\s*1|un|uni)\b/gi, '');
+  // Limpiar espacios múltiples y signos sueltos
+  s = s.replace(/\s+/g, ' ').replace(/[\+,\-_]\s*$/, '').trim();
+
+  // Normalizaciones exactas y limpias
+  if(/corona/i.test(s) && /269/i.test(s)) return 'Cerveza Corona 269cc';
+  if(/pilsener/i.test(s) && /269/i.test(s)) return 'Pilsener 269cc Lata';
+  if(/pilsener/i.test(s) && /355/i.test(s)) return 'Pilsener 355cc Lata';
+  if(/pilsener/i.test(s) && /473/i.test(s)) return 'Pilsener 473cc Lata';
+  if(/colgate/i.test(s)) return 'Pasta Dental Colgate Triple Acción 60ml';
+
+  return s.split(' ').map(w => {
+    const low = w.toLowerCase();
+    if(low === 'cc' || low === 'ml' || low === 'gr' || low === 'g' || low === 'l') return low;
+    if(low.match(/^\d+(cc|ml|l|g|gr)$/)) return low;
+    return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+  }).join(' ');
+}
+
 // Función inteligente de coincidencia de productos evitando confusiones entre variantes (ej: Pink vs Coco)
 function findBestProductMatch(nombreLimpio) {
   if(!nombreLimpio || !productos || !productos.length) return null;
@@ -3529,7 +3678,7 @@ function findBestProductMatch(nombreLimpio) {
   if(exact) return exact;
 
   // 2. Palabras clave distintivas de variantes y licores
-  const variantKeywords = ['pink', 'coco', 'seco', 'gold', 'silver', 'black', 'red', 'blue', 'platino', 'limon', 'sandia', 'maracuya', 'mora', 'energy', 'bongo', 'retornable', 'lata', 'botella', '2000cc', '1000cc', '750ml', '330ml', '269ml', '1l', '2l', 'corona', 'pilsener', 'club', 'stella', 'heineken'];
+  const variantKeywords = ['pink', 'coco', 'seco', 'gold', 'silver', 'black', 'red', 'blue', 'platino', 'limon', 'sandia', 'maracuya', 'mora', 'energy', 'bongo', 'retornable', 'lata', 'botella', '2000cc', '1000cc', '750ml', '330ml', '269ml', '355ml', '473ml', '269cc', '355cc', '473cc', '1l', '2l', 'corona', 'pilsener', 'club', 'stella', 'heineken'];
 
   const targetWords = cleanTarget.split(/[\s\+\-_]+/).filter(w => w.length > 1);
 
@@ -3578,25 +3727,42 @@ function renderMappingRows() {
   }
 
   container.innerHTML = inventariables.map((item, idx) => {
-    const nombreSugerido = item.nombre_limpio || item.nombre_original;
+    const rawNombre = item.nombre_limpio || item.nombre_original;
+    const nombreSugerido = cleanProductName(rawNombre);
     const match = findBestProductMatch(nombreSugerido);
 
-    const subEmpaque = parseInt(item.sub_empaque, 10) || 1;
-    const cajas = parseInt(item.cajas, 10) || 0;
-    const sueltas = (item.unidades_sueltas !== undefined) ? parseInt(item.unidades_sueltas, 10) : (item.unidades_totales || item.cantidad_factura || item.bultos || 1);
-    
-    // Cálculo inicial de unidades reales
-    const totalUnidades = (cajas > 0 || subEmpaque > 1) ? ((cajas * subEmpaque) + sueltas) : sueltas;
-    
-    // Precio unitario por botella / unidad s/IVA
-    let puSinIva = item.precio_unitario_sin_iva;
-    if(!puSinIva || puSinIva <= 0) {
-      if(item.subtotal && totalUnidades > 0) {
-        puSinIva = item.subtotal / totalUnidades;
-      } else {
-        puSinIva = item.precio_bulto_sin_iva || 1;
+    let subEmpaque = parseInt(item.sub_empaque, 10) || 1;
+    let cajas = parseInt(item.cajas, 10) || 0;
+    let sueltas = (item.unidades_sueltas !== undefined) ? parseInt(item.unidades_sueltas, 10) : 0;
+
+    // Detector de empaque inteligente en la descripción original si no vino clasificado
+    const descUpper = (item.nombre_original || item.nombre_limpio || '').toUpperCase();
+    if (subEmpaque === 1) {
+      if (/\b(X24U|X24|24U|CAJA X24)\b/.test(descUpper)) subEmpaque = 24;
+      else if (/\b(6\s*LATA|SIXPACK|6\s*PACK|PACK\s*X6|60MLX6|X6U|X6|6U)\b/.test(descUpper)) subEmpaque = 6;
+      else if (/\b(12U|CAJA X12|12\s*BOTELLAS|X12)\b/.test(descUpper)) subEmpaque = 12;
+      else if (/\b(30U|30\s*LATA)\b/.test(descUpper)) subEmpaque = 30;
+
+      // Si se detectó empaque > 1 y venía en sueltas (ej: 3 de Corona X24U o 4 de Pilsener 6 LATA)
+      if (subEmpaque > 1 && cajas === 0) {
+        const cantOriginal = item.unidades_totales || item.cantidad_factura || item.bultos || sueltas || 1;
+        cajas = cantOriginal;
+        sueltas = 0;
       }
     }
+
+    // Cálculo final de unidades reales
+    const totalUnidades = (cajas > 0 || subEmpaque > 1) ? ((cajas * subEmpaque) + sueltas) : (sueltas || 1);
+    
+    // Precio unitario por botella / lata / unidad s/IVA
+    let puSinIva = item.precio_unitario_sin_iva;
+    if (!puSinIva || puSinIva <= 0 || (subEmpaque > 1 && puSinIva > 3 && item.subtotal)) {
+      if (item.subtotal && totalUnidades > 0) {
+        puSinIva = item.subtotal / totalUnidades;
+      }
+    }
+    if (!puSinIva || puSinIva <= 0) puSinIva = 1;
+
     const puConIva = puSinIva * 1.15;
     const subtotalCalculado = item.subtotal || (totalUnidades * puSinIva);
 
@@ -3621,19 +3787,19 @@ function renderMappingRows() {
         <div id="inv-details-section-${idx}">
           <!-- Nombre Limpio -->
           <div class="field" style="margin-bottom:8px;">
-            <label>Nombre del Producto en Catálogo (incluye sabor / tamaño)</label>
+            <label>Nombre Limpio en Catálogo</label>
             <input type="text" id="map-clean-name-${idx}" value="${escapeHtml(nombreSugerido)}" style="margin-bottom:0; font-weight:600;">
           </div>
 
           <!-- Desglose de Cantidades estilo Distribuidoras (Azende, Dinadec, CN) -->
           <div style="background:#0c121c; border:1px solid #1f2e44; border-radius:8px; padding:8px 10px; margin-bottom:8px;">
             <div style="font-size:11px; text-transform:uppercase; color:var(--blue-bright); font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between;">
-              <span>📦 Cantidades según Factura (SUB / CAJA / UNIDAD)</span>
-              <span style="color:var(--cream-dim); font-family:var(--font-mono);">(Cajas × SUB) + Sueltas</span>
+              <span>📦 Cantidades (Cajas × SUB + Sueltas)</span>
+              <span style="color:var(--cream-dim); font-family:var(--font-mono);">${cajas} cajas × ${subEmpaque} + ${sueltas} = <b>${totalUnidades} uds</b></span>
             </div>
             <div class="field-row" style="margin-bottom:0; gap:6px;">
               <div class="field" style="margin-bottom:0; flex:1;">
-                <label style="font-size:11px;">Cajas (Enteras)</label>
+                <label style="font-size:11px;">Cajas / Packs</label>
                 <input type="number" id="map-cajas-${idx}" value="${cajas}" min="0" oninput="recalcDistributorLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700; text-align:center;">
               </div>
               <div class="field" style="margin-bottom:0; flex:1;">
@@ -3650,7 +3816,7 @@ function renderMappingRows() {
           <!-- Precio Unitario por Botella / Unidad -->
           <div class="field-row" style="margin-bottom:8px; gap:8px;">
             <div class="field" style="margin-bottom:0; flex:1.2;">
-              <label>Precio Unitario s/IVA (por botella)</label>
+              <label>Precio Unitario s/IVA (por lata/botella)</label>
               <input type="number" step="0.0001" id="map-pu-${idx}" value="${puSinIva.toFixed(4)}" oninput="recalcDistributorLineTotals(${idx})" style="margin-bottom:0; font-family:var(--font-mono); font-weight:700;">
             </div>
             <div class="field" style="margin-bottom:0; flex:1;">
@@ -4332,6 +4498,19 @@ function renderReconciliationList() {
     return !q || r.nombre.toLowerCase().includes(q) || r.categoria.toLowerCase().includes(q);
   });
 
+  // Actualizar banner de desfases
+  const desfasados = reconciliationData.filter(r => r.stock_actual !== r.calculado);
+  const banner = document.getElementById('reconcile-alert-banner');
+  const bannerText = document.getElementById('reconcile-alert-text');
+  if(banner && bannerText) {
+    if(desfasados.length > 0) {
+      banner.style.display = 'flex';
+      bannerText.innerHTML = `<b>${desfasados.length} producto(s) con desfase detectado.</b> Pulsa <b>"Conciliar Todo con 1 Clic"</b> para corregirlos automáticamente.`;
+    } else {
+      banner.style.display = 'none';
+    }
+  }
+
   if(!filtered.length) {
     container.innerHTML = '<div class="empty">No hay productos que coincidan con la búsqueda.</div>';
     return;
@@ -4341,36 +4520,48 @@ function renderReconciliationList() {
     const diff = r.stock_actual - r.calculado;
     const isDesfasado = diff !== 0;
 
+    let borderColor = '#24344d';
+    let bgColor = '#131924';
+    if(isDesfasado && diff > 0) { borderColor = '#5a3000'; bgColor = '#1a0e02'; }
+    else if(isDesfasado && diff < 0) { borderColor = '#4d1c25'; bgColor = '#130810'; }
+
     return `
-      <div style="background:#131924; border:1px solid #24344d; border-radius:10px; padding:12px 14px; margin-bottom:10px; box-shadow:0 2px 8px rgba(0,0,0,0.25);">
+      <div style="background:${bgColor}; border:1px solid ${borderColor}; border-radius:10px; padding:12px 14px; margin-bottom:8px;">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; flex-wrap:wrap; gap:4px;">
           <div>
-            <b style="font-size:14px; color:var(--cream);">${escapeHtml(r.nombre)}</b>
-            <div style="font-size:11.5px; color:var(--blue-bright);">🏷 ${escapeHtml(r.categoria)}</div>
+            <b style="font-size:13.5px; color:var(--cream);">${escapeHtml(r.nombre)}</b>
+            <div style="font-size:11px; color:var(--blue-bright);">🏷 ${escapeHtml(r.categoria)}</div>
           </div>
-          ${isDesfasado ? `<span class="badge badge-warn" style="font-size:10.5px;">Desfase: ${diff > 0 ? '+'+diff : diff}</span>` : `<span class="badge badge-ok" style="font-size:10.5px;">✓ Cuadrado</span>`}
+          ${isDesfasado
+            ? `<span class="badge badge-warn" style="font-size:10.5px;">Desfase: ${diff > 0 ? '+'+diff : diff} ${r.unidad_base}</span>`
+            : `<span class="badge badge-ok" style="font-size:10.5px;">✓ Cuadrado</span>`
+          }
         </div>
 
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:6px; margin-bottom:10px;">
-          <div style="background:#0c1f14; border:1px solid #184728; padding:6px 8px; border-radius:6px; font-size:11px;">
-            <span style="color:var(--cream-faint); text-transform:uppercase; font-size:10px; display:block;">Facturas:</span>
-            <b style="color:var(--good-bright); font-size:13px; font-family:var(--font-mono);">+${r.compradas} ${r.unidad_base}</b>
+        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:5px; margin-bottom:10px;">
+          <div style="background:#0c1f14; border:1px solid #184728; padding:5px 7px; border-radius:6px; font-size:11px;">
+            <span style="color:var(--cream-faint); text-transform:uppercase; font-size:9.5px; display:block;">Comprado</span>
+            <b style="color:var(--good-bright); font-size:13px; font-family:var(--font-mono);">+${r.compradas}</b>
           </div>
-          <div style="background:#241216; border:1px solid #4d1c25; padding:6px 8px; border-radius:6px; font-size:11px;">
-            <span style="color:var(--cream-faint); text-transform:uppercase; font-size:10px; display:block;">Vendido:</span>
-            <b style="color:var(--bad-bright); font-size:13px; font-family:var(--font-mono);">-${r.vendidas} ${r.unidad_base}</b>
+          <div style="background:#241216; border:1px solid #4d1c25; padding:5px 7px; border-radius:6px; font-size:11px;">
+            <span style="color:var(--cream-faint); text-transform:uppercase; font-size:9.5px; display:block;">Vendido</span>
+            <b style="color:var(--bad-bright); font-size:13px; font-family:var(--font-mono);">-${r.vendidas}</b>
           </div>
-          <div style="background:#211709; border:1px solid #4a3411; padding:6px 8px; border-radius:6px; font-size:11px;">
-            <span style="color:var(--cream-faint); text-transform:uppercase; font-size:10px; display:block;">Calculado:</span>
-            <b style="color:var(--amber-bright); font-size:13px; font-family:var(--font-mono);">${r.calculado} ${r.unidad_base}</b>
+          <div style="background:#211709; border:1px solid #4a3411; padding:5px 7px; border-radius:6px; font-size:11px;">
+            <span style="color:var(--cream-faint); text-transform:uppercase; font-size:9.5px; display:block;">Calculado</span>
+            <b style="color:var(--amber-bright); font-size:13px; font-family:var(--font-mono);">${r.calculado}</b>
+          </div>
+          <div style="background:#0b1420; border:1px solid #2e3e57; padding:5px 7px; border-radius:6px; font-size:11px;">
+            <span style="color:var(--cream-faint); text-transform:uppercase; font-size:9.5px; display:block;">En Sist.</span>
+            <b style="color:${isDesfasado ? '#ef4444' : 'var(--cream)'}; font-size:13px; font-family:var(--font-mono);">${r.stock_actual}</b>
           </div>
         </div>
 
         <div style="display:flex; align-items:center; gap:8px; justify-content:flex-end;">
-          <label style="margin:0; font-size:12px; color:var(--cream-dim);">Stock Real / Final:</label>
-          <input type="number" id="reconcile-input-${r.id}" min="0" value="${r.stock_actual}" style="width:85px; margin-bottom:0; text-align:center; font-weight:700; font-family:var(--font-mono); background:#0c111a; border-color:#2e3e57;">
-          <button type="button" class="btn btn-ghost" onclick="setReconcileInputVal(${r.id}, ${r.calculado})" style="padding:6px 10px; font-size:11.5px; border-color:var(--amber-border); color:var(--amber-bright);">
-            ⚡ Usar ${r.calculado}
+          <label style="margin:0; font-size:12px; color:var(--cream-dim);">Ajustar a:</label>
+          <input type="number" id="reconcile-input-${r.id}" min="0" value="${r.stock_actual}" style="width:80px; margin-bottom:0; text-align:center; font-weight:700; font-family:var(--font-mono); background:#0c111a; border-color:#2e3e57;">
+          <button type="button" class="btn btn-ghost" onclick="setReconcileInputVal(${r.id}, ${r.calculado})" style="padding:5px 9px; font-size:11px; border-color:var(--amber-border); color:var(--amber-bright);">
+            ⚡ ${r.calculado}
           </button>
         </div>
       </div>
@@ -4388,13 +4579,50 @@ window.autoFillCalculatedStockAll = function() {
     const input = document.getElementById(`reconcile-input-${r.id}`);
     if(input) input.value = r.calculado;
   });
-  showToast('Valores calculados asignados a todos los productos. Presiona Guardar para confirmar.');
+  showToast('Valores calculados asignados. Presiona Guardar para confirmar.');
+};
+
+// ✅ CONCILIACIÓN CON 1 CLIC - Aplica todos los valores calculados directamente a Supabase
+window.oneClickReconcileAll = async function() {
+  const btn = document.getElementById('btn-one-click-reconcile');
+  if(btn) { btn.disabled = true; btn.textContent = '⏳ Aplicando correcciones...'; }
+
+  try {
+    // Solo actualizar los que tienen desfase real
+    const desfasados = reconciliationData.filter(r => r.stock_actual !== r.calculado);
+
+    if(!desfasados.length) {
+      showToast('✓ Todo el inventario ya está cuadrado. No hay desfases.');
+      if(btn) { btn.disabled = false; btn.textContent = '⚡ Conciliar Todo con 1 Clic (Aplicar Valores Calculados al Inventario)'; }
+      return;
+    }
+
+    let errores = 0;
+    for(const r of desfasados) {
+      const nuevoStock = Math.max(0, r.calculado);
+      const { error } = await sb.from('productos').update({ stock_actual: nuevoStock }).eq('id', r.id);
+      if(error) { errores++; console.error(`Error actualizando ${r.nombre}:`, error); }
+    }
+
+    if(errores > 0) {
+      showToast(`Conciliación completada con ${errores} error(es). Revisa la consola.`, true);
+    } else {
+      showToast(`✅ ${desfasados.length} producto(s) conciliados exitosamente con 1 clic.`);
+    }
+
+    document.getElementById('modal-reconciliar-stock').classList.add('hidden');
+    await loadProductos();
+    await loadCombos();
+  } catch(e) {
+    showToast('Error en conciliación masiva: ' + e.message, true);
+  }
+  if(btn) { btn.disabled = false; btn.textContent = '⚡ Conciliar Todo con 1 Clic (Aplicar Valores Calculados al Inventario)'; }
 };
 
 document.getElementById('btn-save-reconciliation')?.addEventListener('click', async () => {
   const btn = document.getElementById('btn-save-reconciliation');
   btn.disabled = true;
-  btn.textContent = 'Actualizando stock en Supabase...';
+  btn.textContent = 'Guardando cambios manuales...';
 
   try {
     let updatedCount = 0;
@@ -4402,6 +4630,7 @@ document.getElementById('btn-save-reconciliation')?.addEventListener('click', as
       const input = document.getElementById(`reconcile-input-${r.id}`);
       if(input) {
         const newVal = parseInt(input.value, 10);
+        // Guardar si el valor del input difiere del stock actual en sistema
         if(!isNaN(newVal) && newVal !== r.stock_actual) {
           const { error } = await sb.from('productos').update({ stock_actual: Math.max(0, newVal) }).eq('id', r.id);
           if(error) throw error;
@@ -4410,15 +4639,19 @@ document.getElementById('btn-save-reconciliation')?.addEventListener('click', as
       }
     }
 
-    showToast(`¡Stock reconciliado y actualizado en Supabase! (${updatedCount} productos actualizados) ✓`);
+    if(updatedCount === 0) {
+      showToast('No se detectaron cambios manuales para guardar.');
+    } else {
+      showToast(`✅ ${updatedCount} producto(s) actualizados en Supabase.`);
+    }
     document.getElementById('modal-reconciliar-stock').classList.add('hidden');
     await loadProductos();
     await loadCombos();
   } catch(e) {
-    showToast('Error guardando reconciliación: ' + e.message, true);
+    showToast('Error guardando: ' + e.message, true);
   }
   btn.disabled = false;
-  btn.textContent = '💾 Guardar Todos los Ajustes de Stock en Supabase';
+  btn.textContent = '💾 Guardar Solo los Cambios Modificados Manualmente';
 });
 </script>
 </body>
